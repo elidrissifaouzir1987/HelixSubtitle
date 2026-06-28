@@ -1,0 +1,47 @@
+# Configuration subgen — toutes les clés sont optionnelles (defaults dans subgen/config.py)
+
+asr:
+  model: large-v3          # large-v3 | large-v3-turbo (+ rapide) | medium | small
+  device: cuda             # cuda | cpu
+  compute_type: float16    # float16 (GPU) | int8 (CPU / éco VRAM)
+  batch_size: 16           # ta RTX 5090 (32 Go) supporte 24-32
+  language: null           # null = détection auto, sinon "en", "fr"...
+  align: true              # alignement mot-à-mot (timings précis)
+  diarize: false           # identification des locuteurs (token HF requis)
+
+translate:
+  enabled: true
+  target_lang: fr          # langue cible (ISO 639-1)
+  backend: nllb            # nllb (local) | llm | api
+  nllb:
+    model: facebook/nllb-200-distilled-600M   # ...-1.3B pour + de qualité
+    device: cuda
+  llm:
+    provider: anthropic    # anthropic (ANTHROPIC_API_KEY) | ollama (local)
+    model: claude-opus-4-8 # ou un modèle ollama : "qwen2.5:14b", "llama3.1"...
+    ollama_host: http://localhost:11434
+  api:
+    provider: deepl        # deepl (DEEPL_API_KEY)
+
+subtitles:
+  formats: [srt]           # srt | ass | vtt (plusieurs possibles : [srt, ass])
+  max_line_chars: 42
+  max_lines: 2
+  max_cps: 17
+  clean_text: true         # retire tatweel/caractères invisibles (anti-carreaux □)
+  strip_diacritics: true   # retire les harakat arabes (sous-titres plus nets)
+
+attach:
+  enabled: true
+  mode: soft               # soft (mux, recommandé) | hard (burn-in) | none
+  container: mp4           # mp4 | mkv
+  hevc: false              # burn-in : true = hevc_nvenc, false = h264_nvenc
+  crf_cq: 23
+  ass_style: "FontName=Arial,FontSize=22,Outline=2,Shadow=0"
+
+io:
+  output_dir: output
+  keep_temp: false
+
+hf_token: null             # ou via variable d'environnement HF_TOKEN
+verbose: false

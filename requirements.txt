@@ -1,0 +1,28 @@
+# Coeur (déjà présents dans .venv)
+whisperx==3.8.1
+faster-whisper==1.2.1
+ctranslate2==4.7.1
+# torch/torchaudio : installer la build CUDA adaptée (cu128 pour RTX 50xx)
+#   pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
+
+# Traduction NLLB (local)
+transformers>=4.45
+sentencepiece>=0.2
+
+# Config / réseau
+PyYAML>=6.0
+requests>=2.31
+
+# Interface web + import par lien vidéo
+Flask>=3.0
+yt-dlp>=2024.0
+# Important sous Windows : huggingface-hub doit rester < 1.0 (compat whisperx/transformers).
+#   N'installe PAS gradio (exige hub >= 1.2, incompatible). L'UI utilise Flask.
+huggingface-hub<1.0,>=0.34.0
+
+# Optionnel — diarisation des locuteurs
+# pyannote.audio>=4.0   (token Hugging Face requis)
+
+# Optionnel — backend api/deepl : aucune lib (REST via requests)
+# Optionnel — backend llm/anthropic : aucune lib (REST via requests, ANTHROPIC_API_KEY)
+# Optionnel — backend llm/ollama : serveur Ollama local
