@@ -12,6 +12,11 @@ output/
 char_report.txt
 tatweel_ctx.txt
 
+# Moteurs lourds : code tiers + modèles (recréés par engines/*/setup.ps1)
+engines/lipsync/Wav2Lip/
+*.pth
+*.onnx
+
 # Outils / IDE
 .claude/
 .idea/

@@ -64,8 +64,9 @@ def _build_cfg(opts: dict) -> Config:
     cfg.override("translate.target_lang", targets[0])
     cfg.override("translate.target_langs", targets if len(targets) > 1 else None)
     cfg.override("subtitles.bilingual", opts["bilingual"])
-    cfg.override("dub.enabled", opts.get("dub", False))
+    cfg.override("dub.enabled", opts.get("dub", False) or opts.get("lipsync", False))
     cfg.override("dub.backend", opts.get("dub_backend", "edge"))
+    cfg.override("lipsync.enabled", opts.get("lipsync", False))
     if opts.get("voice"):
         cfg.override("dub.voice", opts["voice"])
     cfg.override("translate.backend", opts["backend"])
@@ -172,6 +173,7 @@ def create_jobs():
         "bilingual": request.form.get("bilingual") == "1",
         "dub": request.form.get("dub") == "1",
         "dub_backend": request.form.get("dub_backend", "edge"),
+        "lipsync": request.form.get("lipsync") == "1",
         "voice": request.form.get("voice", "").strip(),
         "backend": request.form.get("backend", "nllb"),
         "model": request.form.get("model", "large-v3"),
@@ -466,6 +468,7 @@ details[open] summary:before{content:'▾ '}
     <label class="tog"><input type="checkbox" id="bilingual"> Sous-titres bilingues</label>
     <label class="tog"><input type="checkbox" id="review"> Réviser avant d'attacher</label>
     <label class="tog"><input type="checkbox" id="dub"> Doublage (voix synthétique)</label>
+    <label class="tog"><input type="checkbox" id="lipsync"> Lip-sync (synchro labiale)</label>
   </div>
   <div class="row" style="margin-top:6px">
     <div><label>Voix du doublage</label><select id="dubbackend">
@@ -512,7 +515,8 @@ drop.addEventListener('drop',ev=>{const fs=[...ev.dataTransfer.files];if(fs.leng
 
 // stages
 const STAGES=[
-  {re:/vidéo doublée/i,label:'Montage de la vidéo doublée',pct:97},
+  {re:/lèvres|lip-?sync|Wav2Lip/i,label:'Synchronisation des lèvres',pct:98},
+  {re:/vidéo doublée/i,label:'Montage de la vidéo doublée',pct:96},
   {re:/Assemblage de la piste/i,label:'Assemblage des voix',pct:93},
   {re:/Synthèse vocale/i,label:'Synthèse des voix',pct:90},
   {re:/Vidéo générée|gravé|Mux|Burn/i,label:'Incrustation dans la vidéo',pct:95},
@@ -536,7 +540,8 @@ $('#go').onclick=async()=>{
     ['backend','model','mode','container'].forEach(k=>fd.append(k,$('#'+k).value));
     fd.append('quality',$('#quality').value);
     fd.append('bilingual',$('#bilingual').checked?'1':'0');fd.append('review',$('#review').checked?'1':'0');
-    fd.append('dub',$('#dub').checked?'1':'0');fd.append('dub_backend',$('#dubbackend').value);};
+    fd.append('dub',$('#dub').checked?'1':'0');fd.append('dub_backend',$('#dubbackend').value);
+    fd.append('lipsync',$('#lipsync').checked?'1':'0');};
   $('#form').classList.add('hidden');$('#hero').classList.add('hidden');$('#again').classList.remove('hidden');
   const fd=new FormData();
   if(files.length){files.forEach(f=>fd.append('video',f));} else {fd.append('youtube_url',yt.value.trim());}

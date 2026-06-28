@@ -138,6 +138,12 @@ def finalize_outputs(ffmpeg: str, video: Path, docs: dict, cfg: Config, out_dir:
     if cfg.get("dub", "enabled", default=False):
         from .dub.build import combined_output
         combined = combined_output(ffmpeg, video, written, docs, cfg, out_dir, cancel_event)
+        if cfg.get("lipsync", "enabled", default=False):
+            _ck(cancel_event)
+            from .lipsync import lipsync_combined
+            final = lipsync_combined(ffmpeg, video, Path(combined),
+                                     get_targets(cfg)[0], cfg, out_dir)
+            return subs, final, []
         return subs, combined, []  # fichier unique : pistes audio dans la vidéo
     return subs, attach_docs(ffmpeg, video, written, cfg, out_dir), []
 

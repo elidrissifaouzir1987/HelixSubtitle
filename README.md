@@ -53,6 +53,8 @@ flowchart LR
   qui garde la hauteur de voix.
 - 🗣️ **Clonage de voix (XTTS)** : doublage qui imite la voix d'origine, par locuteur
   (via la diarisation) — environnement isolé, voir [DESIGN.md](DESIGN.md)
+- 👄 **Lip-sync (Wav2Lip)** : aligne les bouches à l'écran sur l'audio doublé
+  (v1 mono-visage) — environnement isolé
 - 🖥️ **Interface web** thème *Helix* : progression, nom de la vidéo, annulation
 - ⚡ **Local & GPU** : aucune donnée envoyée en ligne (sauf backends DeepL/Claude au choix)
 
@@ -87,11 +89,14 @@ progression (étapes parlantes + barre), annule au besoin, puis télécharge le 
 .\run.ps1 "conf.mp4" -s ja -t ar                  # forcer la langue source
 .\run.ps1 "conf.mp4" -t ar --dub                  # doublage : voix arabe synthétique
 .\run.ps1 "conf.mp4" -t ar --clone                # doublage avec clonage de voix (XTTS)
+.\run.ps1 "conf.mp4" -t ar --lipsync              # doublage + synchro labiale
 .\run.ps1 "conf.mp4" -t fr,ar --bilingual         # multi-langues + bilingue
 ```
 
-> Le clonage `--clone` nécessite l'environnement isolé : `.\engines\xtts\setup.ps1`
-> (une fois ; télécharge torch + coqui-tts, puis le modèle XTTS ~1.8 Go au 1er usage).
+> Le clonage `--clone` nécessite `.\engines\xtts\setup.ps1` (torch + coqui-tts,
+> puis modèle XTTS ~1.8 Go au 1er usage). Le lip-sync `--lipsync` nécessite
+> `.\engines\lipsync\setup.ps1` (torch + Wav2Lip + modèles). Les deux tournent
+> dans des environnements **isolés** pour ne pas fragiliser la stack WhisperX.
 
 | Option | Effet |
 |---|---|

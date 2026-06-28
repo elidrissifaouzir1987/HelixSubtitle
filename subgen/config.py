@@ -61,6 +61,10 @@ DEFAULTS: dict[str, Any] = {
         "separate_background": True,  # Demucs : préserver musique/bruitages sous la voix
         "timestretch": "rubberband",  # rubberband (préserve la hauteur) | atempo
     },
+    "lipsync": {                      # synchro labiale (Phase 3, nécessite le doublage)
+        "enabled": False,
+        "engine": "wav2lip",          # wav2lip (venv isolé engines/lipsync)
+    },
     "io": {"output_dir": "output", "keep_temp": False},
     "hf_token": None,                 # sinon variable d'env HF_TOKEN
     "verbose": False,

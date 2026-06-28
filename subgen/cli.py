@@ -29,6 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--dub", action="store_true", help="Doublage : génère une voix synthétique dans la langue cible")
     p.add_argument("--voice", help="Voix Edge-TTS (ex. ar-SA-HamedNeural). Défaut : auto")
     p.add_argument("--clone", action="store_true", help="Doublage avec clonage de voix XTTS (venv isolé requis)")
+    p.add_argument("--lipsync", action="store_true", help="Synchro labiale sur le doublage (venv isolé requis)")
     p.add_argument("--no-translate", action="store_true", help="Désactive la traduction")
     p.add_argument("--device", choices=["cuda", "cpu"], help="Périphérique de calcul")
     p.add_argument("-o", "--output", help="Dossier de sortie")
@@ -48,6 +49,9 @@ def apply_args(cfg: Config, a: argparse.Namespace) -> None:
         cfg.override("dub.enabled", True)
         cfg.override("dub.backend", "xtts")
     if a.voice: cfg.override("dub.voice", a.voice)
+    if a.lipsync:
+        cfg.override("dub.enabled", True)   # le lip-sync nécessite l'audio doublé
+        cfg.override("lipsync.enabled", True)
     if a.backend: cfg.override("translate.backend", a.backend)
     if a.model: cfg.override("asr.model", a.model)
     if a.mode: cfg.override("attach.mode", a.mode)

@@ -162,6 +162,16 @@ Vidéo multi-locuteurs : musique préservée, voix distinctes et naturelles, cal
 
 ## 6. Phase 3 — Lip-sync (capstone)
 
+> **État** : **livré (v1, Wav2Lip).** Moteur isolé dans `engines/lipsync/.venv`
+> (`engines/lipsync/setup.ps1` : venv torch 2.8 cu128 + clone Wav2Lip + `patch.py`
+> de compat librosa/numpy + tolérance frames sans visage + checkpoints). Pont
+> `subgen/lipsync.py` : extrait la voix doublée du fichier combiné, lance Wav2Lip
+> (`--face` vidéo d'origine, `--audio` voix doublée), puis remux image lip-syncée +
+> pistes audio/sous-titres. Activé par `lipsync.enabled` (CLI `--lipsync`, UI toggle ;
+> force le doublage). Faisabilité validée sur sm_120/py3.13/torch 2.8.
+> Limites v1 : un seul visage (pas de détection de locuteur actif multi-personnes),
+> qualité dépendante de la résolution du visage, lent (frame par frame).
+
 **But** : aligner les bouches à l'écran sur l'audio doublé.
 
 ### Modules
