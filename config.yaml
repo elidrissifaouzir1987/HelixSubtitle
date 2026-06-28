@@ -32,6 +32,10 @@ subtitles:
   clean_text: true         # retire tatweel/caractères invisibles (anti-carreaux □)
   strip_diacritics: true   # retire les harakat arabes (sous-titres plus nets)
   bilingual: false         # afficher source + traduction empilées
+  resegment: true          # recouper les longs blocs en sous-titres lisibles (mot-à-mot)
+  max_duration: 6.0        # durée max d'un sous-titre (s)
+  max_gap: 0.7             # pause (s) au-delà de laquelle on coupe
+  speaker_labels: false    # préfixer/colorer par locuteur (nécessite asr.diarize + token HF)
 
 attach:
   enabled: true

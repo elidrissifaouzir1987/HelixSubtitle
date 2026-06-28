@@ -15,6 +15,7 @@ class Segment:
     text: str
     speaker: str | None = None
     translation: str | None = None  # rempli après traduction
+    words: list = field(default_factory=list)  # [{word,start,end,speaker}] si aligné
 
     @property
     def out_text(self) -> str:
@@ -38,6 +39,7 @@ class SubtitleDoc:
                 end=float(s.get("end", 0.0)),
                 text=text,
                 speaker=s.get("speaker"),
+                words=s.get("words") or [],
             ))
         return cls(segments=segs, language=result.get("language"))
 
@@ -58,40 +60,62 @@ def _secondary(seg: Segment, bilingual: bool) -> str | None:
     return None
 
 
+# couleurs ASS par locuteur (format inline BGR)
+_ASS_COLORS = ["&HD6E13D&", "&H8F5DFF&", "&H57C8FF&", "&H8ECF3E&", "&HF0F0F0&", "&HB39DDB&"]
+
+
+def _speaker_map(doc: SubtitleDoc) -> dict[str, int]:
+    """Locuteur brut (SPEAKER_00…) -> index stable (0,1,2…) par ordre d'apparition."""
+    order: list[str] = []
+    for s in doc.segments:
+        if s.speaker and s.speaker not in order:
+            order.append(s.speaker)
+    return {sp: i for i, sp in enumerate(order)}
+
+
 def write(doc: SubtitleDoc, path: Path, fmt: str, *,
           max_chars: int = 42, max_lines: int = 2, ass_style: str = "",
-          bilingual: bool = False) -> Path:
+          bilingual: bool = False, speaker_labels: bool = False) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
+    smap = _speaker_map(doc) if speaker_labels else {}
     fmt = fmt.lower()
     if fmt == "srt":
-        _write_srt(doc, path, max_chars, max_lines, bilingual)
+        _write_srt(doc, path, max_chars, max_lines, bilingual, smap)
     elif fmt == "vtt":
-        _write_vtt(doc, path, max_chars, max_lines, bilingual)
+        _write_vtt(doc, path, max_chars, max_lines, bilingual, smap)
     elif fmt == "ass":
-        _write_ass(doc, path, max_chars, max_lines, ass_style, bilingual)
+        _write_ass(doc, path, max_chars, max_lines, ass_style, bilingual, smap)
     else:
         raise ValueError(f"Format de sous-titre inconnu : {fmt}")
     return path
 
 
-def _write_srt(doc, path, mc, ml, bilingual=False):
+def _prefix(s: Segment, smap: dict) -> str:
+    if smap and s.speaker in smap:
+        return f"S{smap[s.speaker] + 1}: "
+    return ""
+
+
+def _write_srt(doc, path, mc, ml, bilingual=False, smap=None):
+    smap = smap or {}
     with open(path, "w", encoding="utf-8") as f:
         for i, s in enumerate(doc.segments, 1):
             f.write(f"{i}\n{fmt_timestamp(s.start)} --> {fmt_timestamp(s.end)}\n")
-            text = _wrap(s.out_text, mc, ml)
+            text = _wrap(_prefix(s, smap) + s.out_text, mc, ml)
             sec = _secondary(s, bilingual)
             if sec:
                 text += "\n" + _wrap(sec, mc, ml)
             f.write(text + "\n\n")
 
 
-def _write_vtt(doc, path, mc, ml, bilingual=False):
+def _write_vtt(doc, path, mc, ml, bilingual=False, smap=None):
+    smap = smap or {}
     with open(path, "w", encoding="utf-8") as f:
         f.write("WEBVTT\n\n")
         for s in doc.segments:
             a = fmt_timestamp(s.start, comma=False)
             b = fmt_timestamp(s.end, comma=False)
-            text = _wrap(s.out_text, mc, ml)
+            text = _wrap(_prefix(s, smap) + s.out_text, mc, ml)
             sec = _secondary(s, bilingual)
             if sec:
                 text += "\n" + _wrap(sec, mc, ml)
@@ -107,7 +131,8 @@ def _parse_style(style: str) -> dict:
     return out
 
 
-def _write_ass(doc, path, mc, ml, style, bilingual=False):
+def _write_ass(doc, path, mc, ml, style, bilingual=False, smap=None):
+    smap = smap or {}
     st = _parse_style(style)
     font = st.get("FontName", "Arial")
     size = st.get("FontSize", "22")
@@ -132,6 +157,10 @@ def _write_ass(doc, path, mc, ml, style, bilingual=False):
             a = fmt_timestamp(s.start, comma=False)[:-1]  # ASS = centièmes
             b = fmt_timestamp(s.end, comma=False)[:-1]
             txt = _wrap(s.out_text, mc, ml).replace("\n", "\\N")
+            color = ""
+            if smap and s.speaker in smap:  # couleur par locuteur
+                color = f"{{\\c{_ASS_COLORS[smap[s.speaker] % len(_ASS_COLORS)]}}}"
+            txt = color + txt
             sec = _secondary(s, bilingual)
             if sec:  # source en plus petit et légèrement transparent
                 sec_txt = _wrap(sec, mc, ml).replace("\n", "\\N")

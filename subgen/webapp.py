@@ -70,6 +70,9 @@ def _build_cfg(opts: dict) -> Config:
     cfg.override("dub.enabled", opts.get("dub", False) or opts.get("lipsync", False))
     cfg.override("dub.backend", opts.get("dub_backend", "edge"))
     cfg.override("lipsync.enabled", opts.get("lipsync", False))
+    if opts.get("speakers"):
+        cfg.override("asr.diarize", True)
+        cfg.override("subtitles.speaker_labels", True)
     if opts.get("voice"):
         cfg.override("dub.voice", opts["voice"])
     cfg.override("translate.backend", opts["backend"])
@@ -213,6 +216,7 @@ def create_jobs():
         "dub": request.form.get("dub") == "1",
         "dub_backend": request.form.get("dub_backend", "edge"),
         "lipsync": request.form.get("lipsync") == "1",
+        "speakers": request.form.get("speakers") == "1",
         "voice": request.form.get("voice", "").strip(),
         "backend": request.form.get("backend", "nllb"),
         "model": request.form.get("model", "large-v3"),
@@ -613,6 +617,7 @@ details[open] summary:before{content:'▾ '}
     <label class="tog"><input type="checkbox" id="review"> Réviser avant d'attacher</label>
     <label class="tog"><input type="checkbox" id="dub"> Doublage (voix synthétique)</label>
     <label class="tog"><input type="checkbox" id="lipsync"> Lip-sync (synchro labiale)</label>
+    <label class="tog"><input type="checkbox" id="speakers"> Distinguer les locuteurs (token HF)</label>
   </div>
   <div class="row" style="margin-top:6px">
     <div><label>Voix du doublage</label><select id="dubbackend">
@@ -685,7 +690,8 @@ $('#go').onclick=async()=>{
     fd.append('quality',$('#quality').value);
     fd.append('bilingual',$('#bilingual').checked?'1':'0');fd.append('review',$('#review').checked?'1':'0');
     fd.append('dub',$('#dub').checked?'1':'0');fd.append('dub_backend',$('#dubbackend').value);
-    fd.append('lipsync',$('#lipsync').checked?'1':'0');};
+    fd.append('lipsync',$('#lipsync').checked?'1':'0');
+    fd.append('speakers',$('#speakers').checked?'1':'0');};
   $('#form').classList.add('hidden');$('#hero').classList.add('hidden');$('#again').classList.remove('hidden');
   const fd=new FormData();
   if(files.length){files.forEach(f=>fd.append('video',f));} else {fd.append('youtube_url',yt.value.trim());}

@@ -43,6 +43,10 @@ DEFAULTS: dict[str, Any] = {
         "clean_text": True,           # retire tatweel/invisibles (anti-carreaux)
         "strip_diacritics": True,     # retire harakat arabes (sous-titres plus nets)
         "bilingual": False,           # afficher source + traduction empilées
+        "resegment": True,            # recouper les segments longs (mot-à-mot)
+        "max_duration": 6.0,          # durée max d'un sous-titre (s)
+        "max_gap": 0.7,               # pause (s) au-delà de laquelle on coupe
+        "speaker_labels": False,      # préfixer chaque réplique par le locuteur
     },
     "attach": {
         "enabled": True,

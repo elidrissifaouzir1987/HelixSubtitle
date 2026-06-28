@@ -45,6 +45,8 @@ def prepare_source(video: Path, cfg: Config, ffmpeg: str, tmp: Path, cancel_even
     doc = transcribe(wav, cfg)
     if not doc.segments:
         raise RuntimeError("Aucun segment transcrit (audio vide ou silencieux ?).")
+    from .resegment import resegment
+    doc = resegment(doc, cfg)
     return doc
 
 
@@ -93,6 +95,7 @@ def write_docs(docs: dict[str, SubtitleDoc], video: Path, cfg: Config,
     if attach_on and "srt" not in formats:  # srt requis pour le mux/burn
         formats.append("srt")
     bilingual = cfg.get("subtitles", "bilingual", default=False)
+    labels = cfg.get("subtitles", "speaker_labels", default=False)
     mc = int(cfg.get("subtitles", "max_line_chars", default=42))
     ml = int(cfg.get("subtitles", "max_lines", default=2))
     style = cfg.get("attach", "ass_style", default="")
@@ -102,7 +105,8 @@ def write_docs(docs: dict[str, SubtitleDoc], video: Path, cfg: Config,
         written[lang] = {}
         for fmt in formats:
             path = out_dir / f"{video.stem}.{tag}.{fmt}"
-            write(doc, path, fmt, max_chars=mc, max_lines=ml, ass_style=style, bilingual=bilingual)
+            write(doc, path, fmt, max_chars=mc, max_lines=ml, ass_style=style,
+                  bilingual=bilingual, speaker_labels=labels)
             written[lang][fmt] = path
             log.info("Sous-titres écrits : %s", path)
     return written

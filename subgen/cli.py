@@ -26,6 +26,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--container", choices=["mp4", "mkv"], help="Conteneur de sortie")
     p.add_argument("--formats", help="Formats de sous-titres, séparés par des virgules (srt,ass,vtt)")
     p.add_argument("--diarize", action="store_true", help="Active la diarisation (token HF requis)")
+    p.add_argument("--speaker-labels", action="store_true", dest="speaker_labels", help="Distingue/étiquette les locuteurs (implique --diarize)")
     p.add_argument("--dub", action="store_true", help="Doublage : génère une voix synthétique dans la langue cible")
     p.add_argument("--voice", help="Voix Edge-TTS (ex. ar-SA-HamedNeural). Défaut : auto")
     p.add_argument("--clone", action="store_true", help="Doublage avec clonage de voix XTTS (venv isolé requis)")
@@ -58,6 +59,9 @@ def apply_args(cfg: Config, a: argparse.Namespace) -> None:
     if a.container: cfg.override("attach.container", a.container)
     if a.formats: cfg.override("subtitles.formats", [f.strip() for f in a.formats.split(",")])
     if a.diarize: cfg.override("asr.diarize", True)
+    if getattr(a, "speaker_labels", False):
+        cfg.override("asr.diarize", True)
+        cfg.override("subtitles.speaker_labels", True)
     if a.no_translate: cfg.override("translate.enabled", False)
     if a.device:
         cfg.override("asr.device", a.device)
