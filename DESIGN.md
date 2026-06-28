@@ -78,7 +78,9 @@ sans rien toucher d'autre.
 > **État** : livré. `subgen/dub/` (tts.py = Edge-TTS, build.py = calage atempo +
 > assemblage numpy + mux), branché dans `pipeline.process` (`dub.enabled`), CLI
 > `--dub`/`--voice`, toggle UI « Doublage ». Sortie `nom.<lang>.dub.<container>`
-> (voix doublée par défaut + audio original en 2e piste si `keep_original`).
+> Sortie en **un seul fichier** `nom.dubbed.<container>` : pistes audio
+> sélectionnables (original + langue(s) doublée(s), doublage par défaut) +
+> sous-titres. Titres de piste lisibles en MKV ; en MP4, étiquetage par langue.
 > Limites assumées : voix unique par langue, fond sonore non préservé (Phase 2).
 
 ### Modules

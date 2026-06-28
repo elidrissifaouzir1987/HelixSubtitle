@@ -124,11 +124,22 @@ def attach_docs(ffmpeg: str, video: Path, written: dict[str, dict[str, Path]],
     return str(attach(ffmpeg, video, attach_list, cfg, out_dir))
 
 
-def dub_docs(ffmpeg: str, video: Path, docs: dict, cfg: Config, out_dir: Path,
-             cancel_event=None) -> list[str]:
-    """Doublage : une vidéo doublée par langue cible (import tardif, deps TTS)."""
-    from .dub.build import dub_documents
-    return dub_documents(ffmpeg, video, docs, cfg, out_dir, cancel_event)
+def finalize_outputs(ffmpeg: str, video: Path, docs: dict, cfg: Config, out_dir: Path,
+                     cancel_event=None) -> tuple[list[str], str | None, list[str]]:
+    """Écrit les sous-titres puis produit la vidéo finale.
+
+    Sans doublage : sous-titres + vidéo (mux/burn).
+    Avec doublage : **un seul fichier** vidéo avec pistes audio sélectionnables
+    (original + langue(s) doublée(s)) + sous-titres.
+    Renvoie (sous-titres, vidéo, doublages).
+    """
+    written = write_docs(docs, video, cfg, out_dir)
+    subs = [str(p) for fmts in written.values() for p in fmts.values()]
+    if cfg.get("dub", "enabled", default=False):
+        from .dub.build import combined_output
+        combined = combined_output(ffmpeg, video, written, docs, cfg, out_dir, cancel_event)
+        return subs, combined, []  # fichier unique : pistes audio dans la vidéo
+    return subs, attach_docs(ffmpeg, video, written, cfg, out_dir), []
 
 
 # ---- pipeline complet (CLI) ----
@@ -146,13 +157,8 @@ def process(video: Path, cfg: Config, cancel_event=None) -> dict:
         src = prepare_source(video, cfg, ffmpeg, tmp, cancel_event)
         docs = build_docs(src, cfg, cancel_event)
         _ck(cancel_event)
-        written = write_docs(docs, video, cfg, out_dir)
-        results["subtitles"] = [str(p) for fmts in written.values() for p in fmts.values()]
-        _ck(cancel_event)
-        results["video"] = attach_docs(ffmpeg, video, written, cfg, out_dir)
-        if cfg.get("dub", "enabled", default=False):
-            _ck(cancel_event)
-            results["dubs"] = dub_docs(ffmpeg, video, docs, cfg, out_dir, cancel_event)
+        subs, vid, dubs = finalize_outputs(ffmpeg, video, docs, cfg, out_dir, cancel_event)
+        results["subtitles"], results["video"], results["dubs"] = subs, vid, dubs
     finally:
         if not cfg.get("io", "keep_temp", default=False):
             import shutil

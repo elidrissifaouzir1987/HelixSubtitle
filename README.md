@@ -46,7 +46,9 @@ flowchart LR
 - 🎬 **Attache** : piste activable (mux) ou sous-titres gravés (NVENC, H.264/HEVC)
 - 🔗 **Import par lien** : YouTube, Vimeo… (yt-dlp), **playlists**, choix de qualité
 - 📦 **Traitement par lot** : plusieurs fichiers ou une playlist en file d'attente
-- 🔊 **Doublage (v1)** : voix synthétique dans la langue cible (Edge-TTS), calée sur le timing — voir [DESIGN.md](DESIGN.md)
+- 🔊 **Doublage (v1)** : voix synthétique dans la langue cible (Edge-TTS), calée sur le timing.
+  Sortie en **un seul fichier** `*.dubbed.mp4` avec **pistes audio sélectionnables**
+  (original + langue doublée, doublage par défaut) + sous-titres — voir [DESIGN.md](DESIGN.md)
 - 🖥️ **Interface web** thème *Helix* : progression, nom de la vidéo, annulation
 - ⚡ **Local & GPU** : aucune donnée envoyée en ligne (sauf backends DeepL/Claude au choix)
 

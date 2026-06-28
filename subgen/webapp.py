@@ -15,8 +15,8 @@ from pathlib import Path
 from flask import Flask, Response, jsonify, request, send_file
 
 from .config import Config
-from .pipeline import (Cancelled, attach_docs, build_docs, get_targets,
-                       prepare_source, write_docs)
+from .pipeline import (Cancelled, build_docs, finalize_outputs, get_targets,
+                       prepare_source)
 from .subtitles import SubtitleDoc
 from .translate.nllb import NLLB_CODES
 from .utils import download_youtube, expand_url, require_ffmpeg, setup_logging
@@ -78,17 +78,10 @@ def _build_cfg(opts: dict) -> Config:
 
 
 def _finalize_and_attach(job: dict) -> None:
-    """Écrit les sous-titres, attache, et double si demandé (fin de job)."""
-    written = write_docs(job["docs"], job["video"], job["cfg"], OUTPUT)
-    video_out = attach_docs(require_ffmpeg(), job["video"], written, job["cfg"], OUTPUT)
-    dubs: list[str] = []
-    if job["cfg"].get("dub", "enabled", default=False):
-        from .pipeline import dub_docs
-        dubs = dub_docs(require_ffmpeg(), job["video"], job["docs"], job["cfg"], OUTPUT, job["cancel"])
-    job["result"] = {
-        "subtitles": [str(p) for fmts in written.values() for p in fmts.values()],
-        "video": video_out, "dubs": dubs,
-    }
+    """Écrit les sous-titres + vidéo finale (avec pistes doublées si demandé)."""
+    subs, video_out, dubs = finalize_outputs(
+        require_ffmpeg(), job["video"], job["docs"], job["cfg"], OUTPUT, job["cancel"])
+    job["result"] = {"subtitles": subs, "video": video_out, "dubs": dubs}
     job["status"] = "done"
     job["log"].append("✅ Terminé.")
 
