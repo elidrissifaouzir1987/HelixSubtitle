@@ -120,10 +120,15 @@ Voix unique, fond sonore non préservé (ou audio original gardé en doublon), c
 
 ## 5. Phase 2 — Doublage v2 (qualité)
 
-> **État** : **2a livré** (préservation du fond via Demucs two-stems + mixage
-> voix/fond + étirement *rubberband* qui préserve la hauteur). Demucs et soundfile
-> tournent dans le venv principal (vérifié sans conflit ; soundfile = backend I/O de
-> torchaudio 2.8). Reste **2b** : clonage de voix par locuteur (XTTS, à isoler).
+> **État** : **2a + 2b livrés.**
+> - **2a** : préservation du fond via Demucs two-stems + mixage voix/fond + étirement
+>   *rubberband* (préserve la hauteur). Demucs/soundfile dans le venv principal, sans conflit.
+> - **2b** : clonage de voix par locuteur via **XTTS**, isolé dans `engines/xtts/.venv`
+>   (créé par `engines/xtts/setup.ps1`), appelé par sous-processus (`subgen/dub/xtts.py`).
+>   L'isolation était indispensable : coqui-tts tire transformers 5 / hub 1.x qui
+>   casseraient WhisperX. Référence audio extraite par locuteur (diarisation) ; backend
+>   activé par `dub.backend: xtts` (CLI `--clone`, UI « Voix clonée »).
+>   Pièges : épingler torch 2.8 (≥2.9 exige torchcodec, cassé Windows) et transformers < 5.
 
 ### Ajouts
 - **Séparation voix/fond** (`subgen/dub/separate.py`, moteur **Demucs** isolé) :

@@ -28,6 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--diarize", action="store_true", help="Active la diarisation (token HF requis)")
     p.add_argument("--dub", action="store_true", help="Doublage : génère une voix synthétique dans la langue cible")
     p.add_argument("--voice", help="Voix Edge-TTS (ex. ar-SA-HamedNeural). Défaut : auto")
+    p.add_argument("--clone", action="store_true", help="Doublage avec clonage de voix XTTS (venv isolé requis)")
     p.add_argument("--no-translate", action="store_true", help="Désactive la traduction")
     p.add_argument("--device", choices=["cuda", "cpu"], help="Périphérique de calcul")
     p.add_argument("-o", "--output", help="Dossier de sortie")
@@ -43,6 +44,9 @@ def apply_args(cfg: Config, a: argparse.Namespace) -> None:
         cfg.override("translate.target_langs", langs if len(langs) > 1 else None)
     if a.bilingual: cfg.override("subtitles.bilingual", True)
     if a.dub: cfg.override("dub.enabled", True)
+    if a.clone:
+        cfg.override("dub.enabled", True)
+        cfg.override("dub.backend", "xtts")
     if a.voice: cfg.override("dub.voice", a.voice)
     if a.backend: cfg.override("translate.backend", a.backend)
     if a.model: cfg.override("asr.model", a.model)

@@ -65,6 +65,7 @@ def _build_cfg(opts: dict) -> Config:
     cfg.override("translate.target_langs", targets if len(targets) > 1 else None)
     cfg.override("subtitles.bilingual", opts["bilingual"])
     cfg.override("dub.enabled", opts.get("dub", False))
+    cfg.override("dub.backend", opts.get("dub_backend", "edge"))
     if opts.get("voice"):
         cfg.override("dub.voice", opts["voice"])
     cfg.override("translate.backend", opts["backend"])
@@ -170,6 +171,7 @@ def create_jobs():
         "targets": targets,
         "bilingual": request.form.get("bilingual") == "1",
         "dub": request.form.get("dub") == "1",
+        "dub_backend": request.form.get("dub_backend", "edge"),
         "voice": request.form.get("voice", "").strip(),
         "backend": request.form.get("backend", "nllb"),
         "model": request.form.get("model", "large-v3"),
@@ -465,6 +467,11 @@ details[open] summary:before{content:'▾ '}
     <label class="tog"><input type="checkbox" id="review"> Réviser avant d'attacher</label>
     <label class="tog"><input type="checkbox" id="dub"> Doublage (voix synthétique)</label>
   </div>
+  <div class="row" style="margin-top:6px">
+    <div><label>Voix du doublage</label><select id="dubbackend">
+      <option value="edge">Standard · Edge-TTS (rapide)</option>
+      <option value="xtts">Clonée · XTTS (imite la voix d'origine)</option></select></div>
+  </div>
   <button class="go" id="go" disabled>Tisser les sous-titres</button>
   <p class="vidname" id="reviewNote" style="margin-top:10px"></p>
 </section>
@@ -529,7 +536,7 @@ $('#go').onclick=async()=>{
     ['backend','model','mode','container'].forEach(k=>fd.append(k,$('#'+k).value));
     fd.append('quality',$('#quality').value);
     fd.append('bilingual',$('#bilingual').checked?'1':'0');fd.append('review',$('#review').checked?'1':'0');
-    fd.append('dub',$('#dub').checked?'1':'0');};
+    fd.append('dub',$('#dub').checked?'1':'0');fd.append('dub_backend',$('#dubbackend').value);};
   $('#form').classList.add('hidden');$('#hero').classList.add('hidden');$('#again').classList.remove('hidden');
   const fd=new FormData();
   if(files.length){files.forEach(f=>fd.append('video',f));} else {fd.append('youtube_url',yt.value.trim());}

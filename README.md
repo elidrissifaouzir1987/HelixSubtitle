@@ -50,7 +50,9 @@ flowchart LR
   Sortie en **un seul fichier** `*.dubbed.mp4` avec **pistes audio sélectionnables**
   (original + langue doublée, doublage par défaut) + sous-titres.
   **Fond sonore préservé** (musique/bruitages via Demucs) et étirement *rubberband*
-  qui garde la hauteur de voix — voir [DESIGN.md](DESIGN.md)
+  qui garde la hauteur de voix.
+- 🗣️ **Clonage de voix (XTTS)** : doublage qui imite la voix d'origine, par locuteur
+  (via la diarisation) — environnement isolé, voir [DESIGN.md](DESIGN.md)
 - 🖥️ **Interface web** thème *Helix* : progression, nom de la vidéo, annulation
 - ⚡ **Local & GPU** : aucune donnée envoyée en ligne (sauf backends DeepL/Claude au choix)
 
@@ -84,8 +86,12 @@ progression (étapes parlantes + barre), annule au besoin, puis télécharge le 
 .\run.ps1 "conf.mp4" -t es --mode hard --formats srt,ass   # gravé NVENC
 .\run.ps1 "conf.mp4" -s ja -t ar                  # forcer la langue source
 .\run.ps1 "conf.mp4" -t ar --dub                  # doublage : voix arabe synthétique
+.\run.ps1 "conf.mp4" -t ar --clone                # doublage avec clonage de voix (XTTS)
 .\run.ps1 "conf.mp4" -t fr,ar --bilingual         # multi-langues + bilingue
 ```
+
+> Le clonage `--clone` nécessite l'environnement isolé : `.\engines\xtts\setup.ps1`
+> (une fois ; télécharge torch + coqui-tts, puis le modèle XTTS ~1.8 Go au 1er usage).
 
 | Option | Effet |
 |---|---|

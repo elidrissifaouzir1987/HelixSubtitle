@@ -58,13 +58,17 @@ def _mix_voice_bg(ffmpeg: str, voice: Path, bg: Path, out: Path) -> None:
         "mix voix + fond")
 
 
-def build_track(ffmpeg: str, segments, lang: str, cfg: Config, tmp: Path,
+def build_track(ffmpeg: str, video: Path, segments, lang: str, cfg: Config, tmp: Path,
                 total_dur: float, cancel_event=None) -> Path:
     """Synthétise, cale et assemble la piste audio doublée -> WAV."""
-    voice = cfg.get("dub", "voice", default="auto")
     max_su = float(cfg.get("dub", "max_speedup", default=1.3))
     stretch = cfg.get("dub", "timestretch", default="rubberband")
-    items = synth_segments(segments, lang, tmp, voice)
+    backend = cfg.get("dub", "backend", default="edge")
+    if backend == "xtts":
+        from .xtts import xtts_synth_segments
+        items = xtts_synth_segments(ffmpeg, video, segments, lang, tmp, cfg)
+    else:
+        items = synth_segments(segments, lang, tmp, cfg.get("dub", "voice", default="auto"))
 
     n = max(1, int(math.ceil(total_dur * SR)))
     buf = np.zeros(n, dtype=np.int16)
@@ -148,7 +152,7 @@ def combined_output(ffmpeg: str, video: Path, written: dict, docs: dict, cfg: Co
         # 1) pistes audio doublées (un WAV par langue), voix mixée au fond si dispo
         tracks = {}
         for lg in langs:
-            voice = build_track(ffmpeg, docs[lg].segments, lg, cfg, tmp, total, cancel_event)
+            voice = build_track(ffmpeg, video, docs[lg].segments, lg, cfg, tmp, total, cancel_event)
             if accomp is not None:
                 mixed = tmp / f"mix_{lg}.wav"
                 _mix_voice_bg(ffmpeg, voice, accomp, mixed)
@@ -225,7 +229,7 @@ def dub_documents(ffmpeg: str, video: Path, docs: dict, cfg: Config, out_dir: Pa
     for lang, doc in docs.items():
         tmp = Path(tempfile.mkdtemp(prefix="subgen_dub_"))
         try:
-            track = build_track(ffmpeg, doc.segments, lang, cfg, tmp, total_dur, cancel_event)
+            track = build_track(ffmpeg, video, doc.segments, lang, cfg, tmp, total_dur, cancel_event)
             results.append(mux_dub(ffmpeg, video, track, cfg, out_dir, lang))
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
