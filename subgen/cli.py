@@ -25,6 +25,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--mode", choices=["soft", "hard", "none"], help="Attache : mux / burn-in / aucune")
     p.add_argument("--container", choices=["mp4", "mkv"], help="Conteneur de sortie")
     p.add_argument("--formats", help="Formats de sous-titres, séparés par des virgules (srt,ass,vtt)")
+    p.add_argument("--fast", action="store_true", help="Mode rapide : pas d'alignement ni de découpage fin (sous-titres plus grossiers)")
     p.add_argument("--diarize", action="store_true", help="Active la diarisation (token HF requis)")
     p.add_argument("--speaker-labels", action="store_true", dest="speaker_labels", help="Distingue/étiquette les locuteurs (implique --diarize)")
     p.add_argument("--dub", action="store_true", help="Doublage : génère une voix synthétique dans la langue cible")
@@ -58,6 +59,9 @@ def apply_args(cfg: Config, a: argparse.Namespace) -> None:
     if a.mode: cfg.override("attach.mode", a.mode)
     if a.container: cfg.override("attach.container", a.container)
     if a.formats: cfg.override("subtitles.formats", [f.strip() for f in a.formats.split(",")])
+    if getattr(a, "fast", False):  # mode rapide : pas d'alignement ni de redécoupage fin
+        cfg.override("asr.align", False)
+        cfg.override("subtitles.resegment", False)
     if a.diarize: cfg.override("asr.diarize", True)
     if getattr(a, "speaker_labels", False):
         cfg.override("asr.diarize", True)

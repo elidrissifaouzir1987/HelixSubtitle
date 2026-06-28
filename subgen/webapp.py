@@ -67,11 +67,16 @@ def _build_cfg(opts: dict) -> Config:
     cfg.override("translate.target_lang", targets[0])
     cfg.override("translate.target_langs", targets if len(targets) > 1 else None)
     cfg.override("subtitles.bilingual", opts["bilingual"])
+    if not opts.get("detailed", True):   # mode rapide : pas d'alignement ni de redécoupage
+        cfg.override("asr.align", False)
+        cfg.override("subtitles.resegment", False)
     cfg.override("dub.enabled", opts.get("dub", False) or opts.get("lipsync", False))
     cfg.override("dub.backend", opts.get("dub_backend", "edge"))
     cfg.override("lipsync.enabled", opts.get("lipsync", False))
-    if opts.get("speakers"):
+    if opts.get("speakers"):  # locuteurs : nécessite alignement + redécoupage
         cfg.override("asr.diarize", True)
+        cfg.override("asr.align", True)
+        cfg.override("subtitles.resegment", True)
         cfg.override("subtitles.speaker_labels", True)
     if opts.get("voice"):
         cfg.override("dub.voice", opts["voice"])
@@ -212,6 +217,7 @@ def create_jobs():
     targets = list(dict.fromkeys([t for t in targets if t]))  # dédoublonne, garde l'ordre
     base = {
         "targets": targets,
+        "detailed": request.form.get("detailed", "1") == "1",
         "bilingual": request.form.get("bilingual") == "1",
         "dub": request.form.get("dub") == "1",
         "dub_backend": request.form.get("dub_backend", "edge"),
@@ -613,6 +619,7 @@ details[open] summary:before{content:'▾ '}
       <option value="mp4">MP4</option><option value="mkv">MKV</option></select></div>
   </div>
   <div class="toggles">
+    <label class="tog"><input type="checkbox" id="detailed" checked> Découpage fin (précis, plus lent)</label>
     <label class="tog"><input type="checkbox" id="bilingual"> Sous-titres bilingues</label>
     <label class="tog"><input type="checkbox" id="review"> Réviser avant d'attacher</label>
     <label class="tog"><input type="checkbox" id="dub"> Doublage (voix synthétique)</label>
@@ -688,6 +695,7 @@ $('#go').onclick=async()=>{
   const common=(fd)=>{fd.append('source',$('#source').value);targets.forEach(t=>fd.append('targets',t));
     ['backend','model','mode','container'].forEach(k=>fd.append(k,$('#'+k).value));
     fd.append('quality',$('#quality').value);
+    fd.append('detailed',$('#detailed').checked?'1':'0');
     fd.append('bilingual',$('#bilingual').checked?'1':'0');fd.append('review',$('#review').checked?'1':'0');
     fd.append('dub',$('#dub').checked?'1':'0');fd.append('dub_backend',$('#dubbackend').value);
     fd.append('lipsync',$('#lipsync').checked?'1':'0');
