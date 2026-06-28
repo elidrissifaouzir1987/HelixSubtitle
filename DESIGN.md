@@ -120,6 +120,11 @@ Voix unique, fond sonore non préservé (ou audio original gardé en doublon), c
 
 ## 5. Phase 2 — Doublage v2 (qualité)
 
+> **État** : **2a livré** (préservation du fond via Demucs two-stems + mixage
+> voix/fond + étirement *rubberband* qui préserve la hauteur). Demucs et soundfile
+> tournent dans le venv principal (vérifié sans conflit ; soundfile = backend I/O de
+> torchaudio 2.8). Reste **2b** : clonage de voix par locuteur (XTTS, à isoler).
+
 ### Ajouts
 - **Séparation voix/fond** (`subgen/dub/separate.py`, moteur **Demucs** isolé) :
   - extrait `vocals` + `accompaniment` ;

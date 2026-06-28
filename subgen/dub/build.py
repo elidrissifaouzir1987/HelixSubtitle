@@ -29,16 +29,33 @@ def _write_wav(path: Path, data: np.ndarray) -> None:
         w.writeframes(data.tobytes())
 
 
-def _fit_to_wav(ffmpeg: str, mp3: Path, wav: Path, window: float, max_speedup: float) -> None:
-    """Convertit le clip en WAV 24k mono, accéléré si trop long pour la fenêtre."""
+def _fit_to_wav(ffmpeg: str, mp3: Path, wav: Path, window: float, max_speedup: float,
+                stretch: str = "rubberband") -> None:
+    """Convertit le clip en WAV 24k mono, accéléré si trop long pour la fenêtre.
+
+    stretch : 'rubberband' (préserve la hauteur de voix) ou 'atempo'.
+    """
     dur = media_duration(mp3)
     af = []
     if window > 0.1 and dur > window:
         speed = min(dur / window, max_speedup)
         if speed > 1.01:
-            af = ["-filter:a", f"atempo={speed:.4f}"]
+            if stretch == "rubberband":
+                af = ["-filter:a", f"rubberband=tempo={speed:.4f}"]
+            else:
+                af = ["-filter:a", f"atempo={speed:.4f}"]
     run([ffmpeg, "-y", "-i", str(mp3), *af, "-ac", "1", "-ar", str(SR),
          "-c:a", "pcm_s16le", str(wav)], "calage clip TTS")
+
+
+def _mix_voice_bg(ffmpeg: str, voice: Path, bg: Path, out: Path) -> None:
+    """Mixe la voix doublée par-dessus le fond sonore (musique/bruitages)."""
+    fc = ("[0:a]aresample=48000,aformat=channel_layouts=stereo,volume=1.6[v];"
+          "[1:a]aresample=48000,aformat=channel_layouts=stereo,volume=0.9[m];"
+          "[v][m]amix=inputs=2:normalize=0:duration=first[a]")
+    run([ffmpeg, "-y", "-i", str(voice), "-i", str(bg), "-filter_complex", fc,
+         "-map", "[a]", "-ac", "2", "-ar", "48000", "-c:a", "pcm_s16le", str(out)],
+        "mix voix + fond")
 
 
 def build_track(ffmpeg: str, segments, lang: str, cfg: Config, tmp: Path,
@@ -46,6 +63,7 @@ def build_track(ffmpeg: str, segments, lang: str, cfg: Config, tmp: Path,
     """Synthétise, cale et assemble la piste audio doublée -> WAV."""
     voice = cfg.get("dub", "voice", default="auto")
     max_su = float(cfg.get("dub", "max_speedup", default=1.3))
+    stretch = cfg.get("dub", "timestretch", default="rubberband")
     items = synth_segments(segments, lang, tmp, voice)
 
     n = max(1, int(math.ceil(total_dur * SR)))
@@ -58,7 +76,7 @@ def build_track(ffmpeg: str, segments, lang: str, cfg: Config, tmp: Path,
         if not mp3.exists():
             continue
         wav = tmp / f"f_{idx:05d}.wav"
-        _fit_to_wav(ffmpeg, mp3, wav, max(0.0, s.end - s.start), max_su)
+        _fit_to_wav(ffmpeg, mp3, wav, max(0.0, s.end - s.start), max_su, stretch)
         data = _read_wav(wav)
         off = int(s.start * SR)
         if off >= n:
@@ -120,9 +138,23 @@ def combined_output(ffmpeg: str, video: Path, written: dict, docs: dict, cfg: Co
     out = out_dir / f"{video.stem}.dubbed.{container}"
     tmp = Path(tempfile.mkdtemp(prefix="subgen_dub_"))
     try:
-        # 1) pistes audio doublées (un WAV par langue)
-        tracks = {lg: build_track(ffmpeg, docs[lg].segments, lg, cfg, tmp, total, cancel_event)
-                  for lg in langs}
+        # 0) fond sonore (musique/bruitages) à préserver sous la voix doublée
+        accomp = None
+        if cfg.get("dub", "separate_background", default=True):
+            from .separate import separate_background
+            device = cfg.get("asr", "device", default="cuda")
+            accomp = separate_background(ffmpeg, video, tmp, device)
+
+        # 1) pistes audio doublées (un WAV par langue), voix mixée au fond si dispo
+        tracks = {}
+        for lg in langs:
+            voice = build_track(ffmpeg, docs[lg].segments, lg, cfg, tmp, total, cancel_event)
+            if accomp is not None:
+                mixed = tmp / f"mix_{lg}.wav"
+                _mix_voice_bg(ffmpeg, voice, accomp, mixed)
+                tracks[lg] = mixed
+            else:
+                tracks[lg] = voice
 
         # 2) base vidéo : gravée si mode hard, sinon vidéo d'origine
         base = video

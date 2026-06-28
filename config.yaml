@@ -47,6 +47,8 @@ dub:                       # doublage v1 (voix synthétique dans la langue cible
   voice: auto              # "auto" = voix par défaut de la langue, ou ex. ar-SA-HamedNeural
   keep_original: true      # garder l'audio d'origine en 2e piste
   max_speedup: 1.3         # accélération max pour caler la voix dans sa fenêtre
+  separate_background: true  # Demucs : garder musique/bruitages sous la voix doublée
+  timestretch: rubberband  # rubberband (préserve la voix) | atempo
 
 io:
   output_dir: output

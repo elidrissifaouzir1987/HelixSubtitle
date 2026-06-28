@@ -58,6 +58,8 @@ DEFAULTS: dict[str, Any] = {
         "voice": "auto",              # "auto" = voix par défaut de la langue cible
         "keep_original": True,        # garder l'audio d'origine en 2e piste
         "max_speedup": 1.3,           # accélération max pour caler la voix
+        "separate_background": True,  # Demucs : préserver musique/bruitages sous la voix
+        "timestretch": "rubberband",  # rubberband (préserve la hauteur) | atempo
     },
     "io": {"output_dir": "output", "keep_temp": False},
     "hf_token": None,                 # sinon variable d'env HF_TOKEN
