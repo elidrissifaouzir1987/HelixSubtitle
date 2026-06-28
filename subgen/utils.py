@@ -85,6 +85,29 @@ def download_youtube(url: str, out_dir: Path, prefix: str, quality: str = "best"
     return p
 
 
+def expand_url(url: str) -> list[str]:
+    """Renvoie la liste des URLs vidéo d'un lien (1 si vidéo simple, N si playlist)."""
+    import yt_dlp
+
+    opts = {"quiet": True, "no_warnings": True, "extract_flat": True, "skip_download": True}
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(url, download=False)
+    entries = info.get("entries") if isinstance(info, dict) else None
+    if not entries:
+        return [url]
+    urls: list[str] = []
+    for e in entries:
+        if not e:
+            continue
+        u = e.get("url") or e.get("webpage_url") or e.get("id")
+        if not u:
+            continue
+        if not str(u).startswith("http"):
+            u = f"https://www.youtube.com/watch?v={u}"
+        urls.append(u)
+    return urls or [url]
+
+
 def has_audio_stream(video: Path) -> bool:
     """Vrai si la vidéo contient au moins une piste audio (via ffprobe)."""
     probe = shutil.which("ffprobe")

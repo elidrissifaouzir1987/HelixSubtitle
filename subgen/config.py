@@ -24,6 +24,7 @@ DEFAULTS: dict[str, Any] = {
     "translate": {
         "enabled": True,
         "target_lang": "fr",          # langue cible (ISO 639-1)
+        "target_langs": None,         # liste de langues cibles (prioritaire si renseignée)
         "backend": "nllb",            # nllb | llm | api
         "nllb": {"model": "facebook/nllb-200-distilled-600M", "device": "cuda"},
         "llm": {
@@ -41,6 +42,7 @@ DEFAULTS: dict[str, Any] = {
         "max_cps": 17,                # caractères/seconde (lisibilité)
         "clean_text": True,           # retire tatweel/invisibles (anti-carreaux)
         "strip_diacritics": True,     # retire harakat arabes (sous-titres plus nets)
+        "bilingual": False,           # afficher source + traduction empilées
     },
     "attach": {
         "enabled": True,

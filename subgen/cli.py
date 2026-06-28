@@ -18,7 +18,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("video", help="Chemin de la vidéo d'entrée")
     p.add_argument("-c", "--config", help="Fichier config.yaml", default="config.yaml")
     p.add_argument("-s", "--source", help="Forcer la langue d'origine (ISO 639-1, ex. ja). Défaut : détection auto")
-    p.add_argument("-t", "--target", help="Langue cible (ISO 639-1, ex. fr)")
+    p.add_argument("-t", "--target", help="Langue(s) cible(s) ISO 639-1, séparées par des virgules (ex. fr,ar)")
+    p.add_argument("--bilingual", action="store_true", help="Sous-titres bilingues (source + traduction)")
     p.add_argument("-b", "--backend", choices=["nllb", "llm", "api"], help="Moteur de traduction")
     p.add_argument("-m", "--model", help="Modèle ASR (ex. large-v3, large-v3-turbo)")
     p.add_argument("--mode", choices=["soft", "hard", "none"], help="Attache : mux / burn-in / aucune")
@@ -34,7 +35,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 def apply_args(cfg: Config, a: argparse.Namespace) -> None:
     if a.source: cfg.override("asr.language", a.source)
-    if a.target: cfg.override("translate.target_lang", a.target)
+    if a.target:
+        langs = [x.strip() for x in a.target.split(",") if x.strip()]
+        cfg.override("translate.target_lang", langs[0])
+        cfg.override("translate.target_langs", langs if len(langs) > 1 else None)
+    if a.bilingual: cfg.override("subtitles.bilingual", True)
     if a.backend: cfg.override("translate.backend", a.backend)
     if a.model: cfg.override("asr.model", a.model)
     if a.mode: cfg.override("attach.mode", a.mode)

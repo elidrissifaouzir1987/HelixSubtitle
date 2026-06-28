@@ -1,6 +1,11 @@
-"""Orchestration de bout en bout : vidéo -> sous-titres traduits -> vidéo sous-titrée."""
+"""Orchestration : vidéo -> sous-titres traduits (multi-langues, bilingue) -> vidéo.
+
+Exposé en briques réutilisables (prepare_source / translate_for / write_docs /
+attach_docs) pour permettre un flux de révision dans l'interface web.
+"""
 from __future__ import annotations
 
+import copy
 import tempfile
 from pathlib import Path
 
@@ -17,11 +22,111 @@ class Cancelled(RuntimeError):
     """Levée quand l'utilisateur annule le traitement."""
 
 
-def process(video: Path, cfg: Config, cancel_event=None) -> dict:
-    def ck():  # point de contrôle d'annulation (coopératif, entre étapes)
-        if cancel_event is not None and cancel_event.is_set():
-            raise Cancelled("Traitement annulé.")
+def _ck(cancel_event):
+    if cancel_event is not None and cancel_event.is_set():
+        raise Cancelled("Traitement annulé.")
 
+
+def get_targets(cfg: Config) -> list[str]:
+    """Liste des langues cibles (target_langs prioritaire sur target_lang)."""
+    tl = cfg.get("translate", "target_langs")
+    if tl:
+        return [str(x) for x in tl]
+    return [cfg.get("translate", "target_lang", default="fr")]
+
+
+# ---- briques ----
+
+def prepare_source(video: Path, cfg: Config, ffmpeg: str, tmp: Path, cancel_event=None) -> SubtitleDoc:
+    """Extraction audio + transcription/alignement/diarisation -> document source."""
+    _ck(cancel_event)
+    wav = extract_audio(ffmpeg, video, tmp / "audio.wav")
+    _ck(cancel_event)
+    doc = transcribe(wav, cfg)
+    if not doc.segments:
+        raise RuntimeError("Aucun segment transcrit (audio vide ou silencieux ?).")
+    return doc
+
+
+def _clean(doc: SubtitleDoc, cfg: Config) -> None:
+    if not cfg.get("subtitles", "clean_text", default=True):
+        return
+    sd = cfg.get("subtitles", "strip_diacritics", default=True)
+    for s in doc.segments:
+        if s.translation is not None:
+            s.translation = clean_text(s.translation, strip_diacritics=sd)
+        else:
+            s.text = clean_text(s.text, strip_diacritics=sd)
+
+
+def translate_for(src_doc: SubtitleDoc, translator, cfg: Config, lang: str,
+                  cancel_event=None) -> SubtitleDoc:
+    """Copie le document source et le traduit vers `lang`, puis nettoie."""
+    _ck(cancel_event)
+    doc = SubtitleDoc(segments=[copy.copy(s) for s in src_doc.segments],
+                      language=src_doc.language)
+    translator.apply(doc, lang)
+    _clean(doc, cfg)
+    return doc
+
+
+def build_docs(src_doc: SubtitleDoc, cfg: Config, cancel_event=None) -> dict[str, SubtitleDoc]:
+    """Construit un document par langue cible (ou le document source si pas de traduction)."""
+    if not cfg.get("translate", "enabled", default=True):
+        d = SubtitleDoc(segments=[copy.copy(s) for s in src_doc.segments],
+                        language=src_doc.language)
+        _clean(d, cfg)
+        return {src_doc.language or "src": d}
+    translator = build_translator(cfg)
+    docs: dict[str, SubtitleDoc] = {}
+    for lang in get_targets(cfg):
+        docs[lang] = translate_for(src_doc, translator, cfg, lang, cancel_event)
+    return docs
+
+
+def write_docs(docs: dict[str, SubtitleDoc], video: Path, cfg: Config,
+               out_dir: Path) -> dict[str, dict[str, Path]]:
+    """Écrit les fichiers de sous-titres. Renvoie {langue: {format: chemin}}."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    formats = list(cfg.get("subtitles", "formats", default=["srt"]))
+    attach_on = cfg.get("attach", "enabled", default=True) and cfg.get("attach", "mode") != "none"
+    if attach_on and "srt" not in formats:  # srt requis pour le mux/burn
+        formats.append("srt")
+    bilingual = cfg.get("subtitles", "bilingual", default=False)
+    mc = int(cfg.get("subtitles", "max_line_chars", default=42))
+    ml = int(cfg.get("subtitles", "max_lines", default=2))
+    style = cfg.get("attach", "ass_style", default="")
+    written: dict[str, dict[str, Path]] = {}
+    for lang, doc in docs.items():
+        tag = f"{lang}.bi" if bilingual else lang
+        written[lang] = {}
+        for fmt in formats:
+            path = out_dir / f"{video.stem}.{tag}.{fmt}"
+            write(doc, path, fmt, max_chars=mc, max_lines=ml, ass_style=style, bilingual=bilingual)
+            written[lang][fmt] = path
+            log.info("Sous-titres écrits : %s", path)
+    return written
+
+
+def attach_docs(ffmpeg: str, video: Path, written: dict[str, dict[str, Path]],
+                cfg: Config, out_dir: Path) -> str | None:
+    """Attache les sous-titres écrits (mux multi-pistes ou burn-in de la 1re langue)."""
+    if not (cfg.get("attach", "enabled", default=True) and cfg.get("attach", "mode") != "none"):
+        return None
+    mode = cfg.get("attach", "mode", default="soft")
+    attach_list: list[tuple[str, Path]] = []
+    for lang, fmts in written.items():
+        if mode == "hard" and "ass" in fmts:
+            chosen = fmts["ass"]
+        else:
+            chosen = fmts.get("srt") or next(iter(fmts.values()))
+        attach_list.append((lang, chosen))
+    return str(attach(ffmpeg, video, attach_list, cfg, out_dir))
+
+
+# ---- pipeline complet (CLI) ----
+
+def process(video: Path, cfg: Config, cancel_event=None) -> dict:
     video = Path(video).resolve()
     if not video.exists():
         raise FileNotFoundError(f"Vidéo introuvable : {video}")
@@ -30,61 +135,18 @@ def process(video: Path, cfg: Config, cancel_event=None) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
     tmp = Path(tempfile.mkdtemp(prefix="subgen_"))
     results: dict = {"subtitles": [], "video": None}
-
     try:
-        # 1) audio
-        ck()
-        wav = extract_audio(ffmpeg, video, tmp / "audio.wav")
-
-        # 2) ASR + alignement (+ diarisation)
-        ck()
-        doc: SubtitleDoc = transcribe(wav, cfg)
-        if not doc.segments:
-            raise RuntimeError("Aucun segment transcrit (audio vide ou silencieux ?).")
-
-        # 3) traduction
-        ck()
-        if cfg.get("translate", "enabled", default=True):
-            translator = build_translator(cfg)
-            doc = translator.apply(doc, cfg.get("translate", "target_lang", default="fr"))
-
-        # 4) nettoyage du texte (anti-carreaux : tatweel, harakat, invisibles)
-        if cfg.get("subtitles", "clean_text", default=True):
-            sd = cfg.get("subtitles", "strip_diacritics", default=True)
-            for s in doc.segments:
-                if s.translation is not None:
-                    s.translation = clean_text(s.translation, strip_diacritics=sd)
-                else:
-                    s.text = clean_text(s.text, strip_diacritics=sd)
-
-        # écriture des fichiers de sous-titres
-        formats = cfg.get("subtitles", "formats", default=["srt"])
-        mc = int(cfg.get("subtitles", "max_line_chars", default=42))
-        ml = int(cfg.get("subtitles", "max_lines", default=2))
-        style = cfg.get("attach", "ass_style", default="")
-        lang = cfg.get("translate", "target_lang", default="fr")
-        primary: Path | None = None
-        for fmt in formats:
-            path = out_dir / f"{video.stem}.{lang}.{fmt}"
-            write(doc, path, fmt, max_chars=mc, max_lines=ml, ass_style=style)
-            results["subtitles"].append(str(path))
-            log.info("Sous-titres écrits : %s", path)
-            primary = primary or path
-
-        # 5) attache à la vidéo
-        ck()
-        if cfg.get("attach", "enabled", default=True) and cfg.get("attach", "mode") != "none":
-            mode = cfg.get("attach", "mode", default="soft")
-            sub = primary
-            if mode == "hard":  # burn-in préfère ASS si dispo
-                ass = next((Path(p) for p in results["subtitles"] if p.endswith(".ass")), None)
-                sub = ass or primary
-            results["video"] = str(attach(ffmpeg, video, sub, cfg, out_dir))
+        src = prepare_source(video, cfg, ffmpeg, tmp, cancel_event)
+        docs = build_docs(src, cfg, cancel_event)
+        _ck(cancel_event)
+        written = write_docs(docs, video, cfg, out_dir)
+        results["subtitles"] = [str(p) for fmts in written.values() for p in fmts.values()]
+        _ck(cancel_event)
+        results["video"] = attach_docs(ffmpeg, video, written, cfg, out_dir)
     finally:
         if not cfg.get("io", "keep_temp", default=False):
             import shutil
             shutil.rmtree(tmp, ignore_errors=True)
         else:
             log.info("Fichiers temporaires conservés : %s", tmp)
-
     return results

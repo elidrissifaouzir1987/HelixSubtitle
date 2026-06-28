@@ -11,7 +11,8 @@ asr:
 
 translate:
   enabled: true
-  target_lang: fr          # langue cible (ISO 639-1)
+  target_lang: fr          # langue cible principale (ISO 639-1)
+  target_langs: null       # plusieurs langues en une passe, ex. [fr, ar, es]
   backend: nllb            # nllb (local) | llm | api
   nllb:
     model: facebook/nllb-200-distilled-600M   # ...-1.3B pour + de qualité
@@ -30,6 +31,7 @@ subtitles:
   max_cps: 17
   clean_text: true         # retire tatweel/caractères invisibles (anti-carreaux □)
   strip_diacritics: true   # retire les harakat arabes (sous-titres plus nets)
+  bilingual: false         # afficher source + traduction empilées
 
 attach:
   enabled: true

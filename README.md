@@ -39,9 +39,13 @@ flowchart LR
 
 - 🎙️ **Transcription** précise avec alignement mot-à-mot (WhisperX / faster-whisper)
 - 🌍 **Traduction configurable** : NLLB (local, ~30 langues), LLM (Claude / Ollama), DeepL
+- 🗂️ **Multi-langues en une passe** : plusieurs langues cibles, transcription mutualisée, mux multi-pistes
+- 🪢 **Sous-titres bilingues** : source + traduction empilées (apprentissage)
+- ✎ **Éditeur intégré** : réviser/corriger les sous-titres avant l'attache
 - 🧹 **Nettoyage texte** anti-carreaux (tatweel, harakat, caractères invisibles)
 - 🎬 **Attache** : piste activable (mux) ou sous-titres gravés (NVENC, H.264/HEVC)
-- 🔗 **Import par lien** : YouTube, Vimeo… (yt-dlp) avec choix de qualité
+- 🔗 **Import par lien** : YouTube, Vimeo… (yt-dlp), **playlists**, choix de qualité
+- 📦 **Traitement par lot** : plusieurs fichiers ou une playlist en file d'attente
 - 🖥️ **Interface web** thème *Helix* : progression, nom de la vidéo, annulation
 - ⚡ **Local & GPU** : aucune donnée envoyée en ligne (sauf backends DeepL/Claude au choix)
 

@@ -51,35 +51,51 @@ def _wrap(text: str, max_chars: int, max_lines: int) -> str:
     return "\n".join(lines)
 
 
+def _secondary(seg: Segment, bilingual: bool) -> str | None:
+    """Ligne secondaire (texte source) en mode bilingue, si pertinent."""
+    if bilingual and seg.translation is not None and seg.text and seg.text != seg.translation:
+        return seg.text
+    return None
+
+
 def write(doc: SubtitleDoc, path: Path, fmt: str, *,
-          max_chars: int = 42, max_lines: int = 2, ass_style: str = "") -> Path:
+          max_chars: int = 42, max_lines: int = 2, ass_style: str = "",
+          bilingual: bool = False) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     fmt = fmt.lower()
     if fmt == "srt":
-        _write_srt(doc, path, max_chars, max_lines)
+        _write_srt(doc, path, max_chars, max_lines, bilingual)
     elif fmt == "vtt":
-        _write_vtt(doc, path, max_chars, max_lines)
+        _write_vtt(doc, path, max_chars, max_lines, bilingual)
     elif fmt == "ass":
-        _write_ass(doc, path, max_chars, max_lines, ass_style)
+        _write_ass(doc, path, max_chars, max_lines, ass_style, bilingual)
     else:
         raise ValueError(f"Format de sous-titre inconnu : {fmt}")
     return path
 
 
-def _write_srt(doc, path, mc, ml):
+def _write_srt(doc, path, mc, ml, bilingual=False):
     with open(path, "w", encoding="utf-8") as f:
         for i, s in enumerate(doc.segments, 1):
             f.write(f"{i}\n{fmt_timestamp(s.start)} --> {fmt_timestamp(s.end)}\n")
-            f.write(_wrap(s.out_text, mc, ml) + "\n\n")
+            text = _wrap(s.out_text, mc, ml)
+            sec = _secondary(s, bilingual)
+            if sec:
+                text += "\n" + _wrap(sec, mc, ml)
+            f.write(text + "\n\n")
 
 
-def _write_vtt(doc, path, mc, ml):
+def _write_vtt(doc, path, mc, ml, bilingual=False):
     with open(path, "w", encoding="utf-8") as f:
         f.write("WEBVTT\n\n")
         for s in doc.segments:
             a = fmt_timestamp(s.start, comma=False)
             b = fmt_timestamp(s.end, comma=False)
-            f.write(f"{a} --> {b}\n{_wrap(s.out_text, mc, ml)}\n\n")
+            text = _wrap(s.out_text, mc, ml)
+            sec = _secondary(s, bilingual)
+            if sec:
+                text += "\n" + _wrap(sec, mc, ml)
+            f.write(f"{a} --> {b}\n{text}\n\n")
 
 
 def _parse_style(style: str) -> dict:
@@ -91,12 +107,16 @@ def _parse_style(style: str) -> dict:
     return out
 
 
-def _write_ass(doc, path, mc, ml, style):
+def _write_ass(doc, path, mc, ml, style, bilingual=False):
     st = _parse_style(style)
     font = st.get("FontName", "Arial")
     size = st.get("FontSize", "22")
     outline = st.get("Outline", "2")
     shadow = st.get("Shadow", "0")
+    try:
+        small = max(12, int(round(int(size) * 0.7)))
+    except ValueError:
+        small = 16
     header = (
         "[Script Info]\nScriptType: v4.00+\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n"
         "[V4+ Styles]\n"
@@ -112,4 +132,8 @@ def _write_ass(doc, path, mc, ml, style):
             a = fmt_timestamp(s.start, comma=False)[:-1]  # ASS = centièmes
             b = fmt_timestamp(s.end, comma=False)[:-1]
             txt = _wrap(s.out_text, mc, ml).replace("\n", "\\N")
+            sec = _secondary(s, bilingual)
+            if sec:  # source en plus petit et légèrement transparent
+                sec_txt = _wrap(sec, mc, ml).replace("\n", "\\N")
+                txt += f"\\N{{\\fs{small}\\alpha&H60&}}{sec_txt}"
             f.write(f"Dialogue: 0,{a},{b},Default,,0,0,0,,{txt}\n")
