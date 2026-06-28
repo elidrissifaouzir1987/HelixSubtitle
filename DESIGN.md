@@ -71,9 +71,15 @@ sans rien toucher d'autre.
 
 ---
 
-## 4. Phase 1 — Doublage v1 (base indispensable)
+## 4. Phase 1 — Doublage v1 (base indispensable) — ✅ IMPLÉMENTÉ
 
 **But** : prouver le flux de bout en bout avec une qualité « correcte ».
+
+> **État** : livré. `subgen/dub/` (tts.py = Edge-TTS, build.py = calage atempo +
+> assemblage numpy + mux), branché dans `pipeline.process` (`dub.enabled`), CLI
+> `--dub`/`--voice`, toggle UI « Doublage ». Sortie `nom.<lang>.dub.<container>`
+> (voix doublée par défaut + audio original en 2e piste si `keep_original`).
+> Limites assumées : voix unique par langue, fond sonore non préservé (Phase 2).
 
 ### Modules
 - `subgen/dub/tts.py` — interface `TTS.synth(text, lang, voice) -> wav`

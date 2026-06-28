@@ -64,6 +64,9 @@ def _build_cfg(opts: dict) -> Config:
     cfg.override("translate.target_lang", targets[0])
     cfg.override("translate.target_langs", targets if len(targets) > 1 else None)
     cfg.override("subtitles.bilingual", opts["bilingual"])
+    cfg.override("dub.enabled", opts.get("dub", False))
+    if opts.get("voice"):
+        cfg.override("dub.voice", opts["voice"])
     cfg.override("translate.backend", opts["backend"])
     cfg.override("attach.mode", opts["mode"])
     cfg.override("attach.container", opts["container"])
@@ -75,11 +78,16 @@ def _build_cfg(opts: dict) -> Config:
 
 
 def _finalize_and_attach(job: dict) -> None:
-    """Écrit les sous-titres puis attache (phase commune fin de job)."""
+    """Écrit les sous-titres, attache, et double si demandé (fin de job)."""
     written = write_docs(job["docs"], job["video"], job["cfg"], OUTPUT)
+    video_out = attach_docs(require_ffmpeg(), job["video"], written, job["cfg"], OUTPUT)
+    dubs: list[str] = []
+    if job["cfg"].get("dub", "enabled", default=False):
+        from .pipeline import dub_docs
+        dubs = dub_docs(require_ffmpeg(), job["video"], job["docs"], job["cfg"], OUTPUT, job["cancel"])
     job["result"] = {
         "subtitles": [str(p) for fmts in written.values() for p in fmts.values()],
-        "video": attach_docs(require_ffmpeg(), job["video"], written, job["cfg"], OUTPUT),
+        "video": video_out, "dubs": dubs,
     }
     job["status"] = "done"
     job["log"].append("✅ Terminé.")
@@ -168,6 +176,8 @@ def create_jobs():
     base = {
         "targets": targets,
         "bilingual": request.form.get("bilingual") == "1",
+        "dub": request.form.get("dub") == "1",
+        "voice": request.form.get("voice", "").strip(),
         "backend": request.form.get("backend", "nllb"),
         "model": request.form.get("model", "large-v3"),
         "mode": request.form.get("mode", "soft"),
@@ -241,6 +251,8 @@ def job_status(job_id: str):
     if job["status"] == "done" and job["result"]:
         if job["result"].get("video"):
             out["files"].append({"kind": "video", "name": Path(job["result"]["video"]).name})
+        for d in job["result"].get("dubs", []):
+            out["files"].append({"kind": "dub", "name": Path(d).name})
         for s in job["result"].get("subtitles", []):
             out["files"].append({"kind": "sub", "name": Path(s).name})
     return jsonify(out)
@@ -458,6 +470,7 @@ details[open] summary:before{content:'▾ '}
   <div class="toggles">
     <label class="tog"><input type="checkbox" id="bilingual"> Sous-titres bilingues</label>
     <label class="tog"><input type="checkbox" id="review"> Réviser avant d'attacher</label>
+    <label class="tog"><input type="checkbox" id="dub"> Doublage (voix synthétique)</label>
   </div>
   <button class="go" id="go" disabled>Tisser les sous-titres</button>
   <p class="vidname" id="reviewNote" style="margin-top:10px"></p>
@@ -499,6 +512,9 @@ drop.addEventListener('drop',ev=>{const fs=[...ev.dataTransfer.files];if(fs.leng
 
 // stages
 const STAGES=[
+  {re:/vidéo doublée/i,label:'Montage de la vidéo doublée',pct:97},
+  {re:/Assemblage de la piste/i,label:'Assemblage des voix',pct:93},
+  {re:/Synthèse vocale/i,label:'Synthèse des voix',pct:90},
   {re:/Vidéo générée|gravé|Mux|Burn/i,label:'Incrustation dans la vidéo',pct:95},
   {re:/révision/i,label:'En attente de révision',pct:80},
   {re:/Sous-titres écrits/i,label:'Écriture des sous-titres',pct:86},
@@ -519,7 +535,8 @@ $('#go').onclick=async()=>{
   const common=(fd)=>{fd.append('source',$('#source').value);targets.forEach(t=>fd.append('targets',t));
     ['backend','model','mode','container'].forEach(k=>fd.append(k,$('#'+k).value));
     fd.append('quality',$('#quality').value);
-    fd.append('bilingual',$('#bilingual').checked?'1':'0');fd.append('review',$('#review').checked?'1':'0');};
+    fd.append('bilingual',$('#bilingual').checked?'1':'0');fd.append('review',$('#review').checked?'1':'0');
+    fd.append('dub',$('#dub').checked?'1':'0');};
   $('#form').classList.add('hidden');$('#hero').classList.add('hidden');$('#again').classList.remove('hidden');
   const fd=new FormData();
   if(files.length){files.forEach(f=>fd.append('video',f));} else {fd.append('youtube_url',yt.value.trim());}
@@ -572,9 +589,10 @@ function finishCard(el,j){
   setCard(el,'done','terminé');setProg(el,{label:"C'est tissé ✦",pct:100});
   el.querySelector('.cx').classList.add('hidden');el.querySelector('.ch').classList.add('hidden');
   const box=el.querySelector('.fl');box.innerHTML='';box.classList.remove('hidden');
+  const ICO={video:'🎬',dub:'🔊',sub:'🅰'},LBL={video:'Vidéo sous-titrée',dub:'Vidéo doublée',sub:'Sous-titres'};
   (j.files||[]).forEach(f=>{const a=document.createElement('a');a.href='/api/download/'+encodeURIComponent(f.name);
-    a.innerHTML='<span class="k">'+(f.kind==='video'?'🎬':'🅰')+'</span><span><b>'+
-      (f.kind==='video'?'Vidéo sous-titrée':'Sous-titres')+'</b><br><span class="n">'+f.name+'</span></span><span class="dl">télécharger</span>';
+    a.innerHTML='<span class="k">'+(ICO[f.kind]||'📄')+'</span><span><b>'+
+      (LBL[f.kind]||'Fichier')+'</b><br><span class="n">'+f.name+'</span></span><span class="dl">télécharger</span>';
     box.appendChild(a);});
 }
 function showEditor(el,id,j){

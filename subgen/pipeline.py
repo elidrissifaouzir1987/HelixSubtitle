@@ -124,6 +124,13 @@ def attach_docs(ffmpeg: str, video: Path, written: dict[str, dict[str, Path]],
     return str(attach(ffmpeg, video, attach_list, cfg, out_dir))
 
 
+def dub_docs(ffmpeg: str, video: Path, docs: dict, cfg: Config, out_dir: Path,
+             cancel_event=None) -> list[str]:
+    """Doublage : une vidéo doublée par langue cible (import tardif, deps TTS)."""
+    from .dub.build import dub_documents
+    return dub_documents(ffmpeg, video, docs, cfg, out_dir, cancel_event)
+
+
 # ---- pipeline complet (CLI) ----
 
 def process(video: Path, cfg: Config, cancel_event=None) -> dict:
@@ -134,7 +141,7 @@ def process(video: Path, cfg: Config, cancel_event=None) -> dict:
     out_dir = Path(cfg.get("io", "output_dir", default="output")).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
     tmp = Path(tempfile.mkdtemp(prefix="subgen_"))
-    results: dict = {"subtitles": [], "video": None}
+    results: dict = {"subtitles": [], "video": None, "dubs": []}
     try:
         src = prepare_source(video, cfg, ffmpeg, tmp, cancel_event)
         docs = build_docs(src, cfg, cancel_event)
@@ -143,6 +150,9 @@ def process(video: Path, cfg: Config, cancel_event=None) -> dict:
         results["subtitles"] = [str(p) for fmts in written.values() for p in fmts.values()]
         _ck(cancel_event)
         results["video"] = attach_docs(ffmpeg, video, written, cfg, out_dir)
+        if cfg.get("dub", "enabled", default=False):
+            _ck(cancel_event)
+            results["dubs"] = dub_docs(ffmpeg, video, docs, cfg, out_dir, cancel_event)
     finally:
         if not cfg.get("io", "keep_temp", default=False):
             import shutil

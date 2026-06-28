@@ -16,6 +16,9 @@ requests>=2.31
 # Interface web + import par lien vidéo
 Flask>=3.0
 yt-dlp>=2024.0
+
+# Doublage v1 (synthèse vocale Edge-TTS, en ligne, gratuit)
+edge-tts>=6.1
 # Important sous Windows : huggingface-hub doit rester < 1.0 (compat whisperx/transformers).
 #   N'installe PAS gradio (exige hub >= 1.2, incompatible). L'UI utilise Flask.
 huggingface-hub<1.0,>=0.34.0

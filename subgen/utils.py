@@ -108,6 +108,22 @@ def expand_url(url: str) -> list[str]:
     return urls or [url]
 
 
+def media_duration(path: Path) -> float:
+    """Durée en secondes d'un fichier média (via ffprobe ; 0.0 si inconnu)."""
+    probe = shutil.which("ffprobe")
+    if not probe:
+        return 0.0
+    proc = subprocess.run(
+        [probe, "-v", "error", "-show_entries", "format=duration",
+         "-of", "default=nw=1:nk=1", str(path)],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    try:
+        return float((proc.stdout or "").strip())
+    except ValueError:
+        return 0.0
+
+
 def has_audio_stream(video: Path) -> bool:
     """Vrai si la vidéo contient au moins une piste audio (via ffprobe)."""
     probe = shutil.which("ffprobe")

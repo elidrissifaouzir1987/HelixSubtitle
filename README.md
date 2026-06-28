@@ -46,6 +46,7 @@ flowchart LR
 - 🎬 **Attache** : piste activable (mux) ou sous-titres gravés (NVENC, H.264/HEVC)
 - 🔗 **Import par lien** : YouTube, Vimeo… (yt-dlp), **playlists**, choix de qualité
 - 📦 **Traitement par lot** : plusieurs fichiers ou une playlist en file d'attente
+- 🔊 **Doublage (v1)** : voix synthétique dans la langue cible (Edge-TTS), calée sur le timing — voir [DESIGN.md](DESIGN.md)
 - 🖥️ **Interface web** thème *Helix* : progression, nom de la vidéo, annulation
 - ⚡ **Local & GPU** : aucune donnée envoyée en ligne (sauf backends DeepL/Claude au choix)
 
@@ -78,6 +79,8 @@ progression (étapes parlantes + barre), annule au besoin, puis télécharge le 
 .\run.ps1 "conf.mp4" -t fr -b llm                 # traduction LLM
 .\run.ps1 "conf.mp4" -t es --mode hard --formats srt,ass   # gravé NVENC
 .\run.ps1 "conf.mp4" -s ja -t ar                  # forcer la langue source
+.\run.ps1 "conf.mp4" -t ar --dub                  # doublage : voix arabe synthétique
+.\run.ps1 "conf.mp4" -t fr,ar --bilingual         # multi-langues + bilingue
 ```
 
 | Option | Effet |

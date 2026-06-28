@@ -26,6 +26,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--container", choices=["mp4", "mkv"], help="Conteneur de sortie")
     p.add_argument("--formats", help="Formats de sous-titres, séparés par des virgules (srt,ass,vtt)")
     p.add_argument("--diarize", action="store_true", help="Active la diarisation (token HF requis)")
+    p.add_argument("--dub", action="store_true", help="Doublage : génère une voix synthétique dans la langue cible")
+    p.add_argument("--voice", help="Voix Edge-TTS (ex. ar-SA-HamedNeural). Défaut : auto")
     p.add_argument("--no-translate", action="store_true", help="Désactive la traduction")
     p.add_argument("--device", choices=["cuda", "cpu"], help="Périphérique de calcul")
     p.add_argument("-o", "--output", help="Dossier de sortie")
@@ -40,6 +42,8 @@ def apply_args(cfg: Config, a: argparse.Namespace) -> None:
         cfg.override("translate.target_lang", langs[0])
         cfg.override("translate.target_langs", langs if len(langs) > 1 else None)
     if a.bilingual: cfg.override("subtitles.bilingual", True)
+    if a.dub: cfg.override("dub.enabled", True)
+    if a.voice: cfg.override("dub.voice", a.voice)
     if a.backend: cfg.override("translate.backend", a.backend)
     if a.model: cfg.override("asr.model", a.model)
     if a.mode: cfg.override("attach.mode", a.mode)
@@ -69,8 +73,9 @@ def main(argv: list[str] | None = None) -> int:
         if cfg.get("verbose"):
             raise
         return 1
-    log.info("Terminé. Sous-titres : %s | Vidéo : %s",
-             ", ".join(res["subtitles"]) or "—", res["video"] or "—")
+    log.info("Terminé. Sous-titres : %s | Vidéo : %s | Doublage : %s",
+             ", ".join(res["subtitles"]) or "—", res["video"] or "—",
+             ", ".join(res.get("dubs") or []) or "—")
     return 0
 
 

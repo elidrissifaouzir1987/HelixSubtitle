@@ -52,6 +52,13 @@ DEFAULTS: dict[str, Any] = {
         "crf_cq": 23,
         "ass_style": "FontName=Arial,FontSize=22,Outline=2,Shadow=0",
     },
+    "dub": {                          # doublage v1 (voix synthétique)
+        "enabled": False,
+        "backend": "edge",            # edge (Edge-TTS, en ligne, gratuit)
+        "voice": "auto",              # "auto" = voix par défaut de la langue cible
+        "keep_original": True,        # garder l'audio d'origine en 2e piste
+        "max_speedup": 1.3,           # accélération max pour caler la voix
+    },
     "io": {"output_dir": "output", "keep_temp": False},
     "hf_token": None,                 # sinon variable d'env HF_TOKEN
     "verbose": False,
