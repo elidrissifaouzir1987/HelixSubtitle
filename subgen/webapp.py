@@ -17,6 +17,8 @@ from flask import Flask, Response, jsonify, request, send_file
 from .config import Config
 from .pipeline import (Cancelled, build_docs, finalize_outputs, get_targets,
                        prepare_source)
+from .store import (add_project, apply_to_env, load_projects, save_settings,
+                    settings_status, load_settings)
 from .subtitles import SubtitleDoc
 from .translate.nllb import NLLB_CODES
 from .utils import download_youtube, expand_url, require_ffmpeg, setup_logging
@@ -56,6 +58,7 @@ setup_logging(False)
 _h = JobLogHandler()
 _h.setFormatter(logging.Formatter("%(asctime)s  %(message)s", "%H:%M:%S"))
 logging.getLogger("subgen").addHandler(_h)
+apply_to_env()  # charge les clés API enregistrées dans l'environnement
 
 
 def _build_cfg(opts: dict) -> Config:
@@ -70,6 +73,10 @@ def _build_cfg(opts: dict) -> Config:
     if opts.get("voice"):
         cfg.override("dub.voice", opts["voice"])
     cfg.override("translate.backend", opts["backend"])
+    if opts["backend"] == "llm":  # provider + modèle depuis les réglages
+        s = load_settings()
+        cfg.override("translate.llm.provider", s.get("llm_provider", "anthropic"))
+        cfg.override("translate.llm.model", s.get("llm_model", "claude-opus-4-8"))
     cfg.override("attach.mode", opts["mode"])
     cfg.override("attach.container", opts["container"])
     cfg.override("asr.model", opts["model"])
@@ -86,6 +93,38 @@ def _finalize_and_attach(job: dict) -> None:
     job["result"] = {"subtitles": subs, "video": video_out, "dubs": dubs}
     job["status"] = "done"
     job["log"].append("✅ Terminé.")
+    _persist_project(job)
+
+
+def _persist_project(job: dict) -> None:
+    import datetime
+    res = job.get("result") or {}
+    files = []
+    if res.get("video"):
+        files.append({"kind": "video", "name": Path(res["video"]).name})
+    for s in res.get("subtitles", []):
+        files.append({"kind": "sub", "name": Path(s).name})
+    opts = job.get("opts", {})
+    try:
+        add_project({
+            "id": job.get("id", ""),
+            "name": job.get("name"),
+            "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "targets": opts.get("targets", []),
+            "tags": _project_tags(opts),
+            "files": files,
+        })
+    except Exception:
+        pass
+
+
+def _project_tags(opts: dict) -> list[str]:
+    t = []
+    if opts.get("bilingual"): t.append("bilingue")
+    if opts.get("dub") or opts.get("lipsync"):
+        t.append("doublage clonée" if opts.get("dub_backend") == "xtts" else "doublage")
+    if opts.get("lipsync"): t.append("lip-sync")
+    return t
 
 
 def _run_job(job_id: str, video: Path | None, opts: dict) -> None:
@@ -154,7 +193,7 @@ def _cues(docs: dict[str, SubtitleDoc], primary: str) -> list[dict]:
 
 def _new_job(name: str) -> str:
     jid = uuid.uuid4().hex[:12]
-    jobs[jid] = {"status": "queued", "log": [], "result": None, "error": None,
+    jobs[jid] = {"id": jid, "status": "queued", "log": [], "result": None, "error": None,
                  "name": name, "cancel": threading.Event()}
     return jid
 
@@ -205,6 +244,7 @@ def create_jobs():
     for _, _, opts in specs:
         opts["review"] = want_review and single
     for jid, vid, opts in specs:
+        jobs[jid]["opts"] = opts
         threading.Thread(target=_run_job, args=(jid, vid, opts), name=jid, daemon=True).start()
 
     return jsonify(job_ids=[s[0] for s in specs])
@@ -253,6 +293,32 @@ def job_status(job_id: str):
         for s in job["result"].get("subtitles", []):
             out["files"].append({"kind": "sub", "name": Path(s).name})
     return jsonify(out)
+
+
+@app.get("/api/jobs")
+def list_jobs():
+    """Jobs de la session courante (pour le panneau « en cours »)."""
+    out = []
+    for jid, j in jobs.items():
+        out.append({"id": jid, "name": j.get("name"), "status": j["status"]})
+    return jsonify(jobs=out)
+
+
+@app.get("/api/settings")
+def get_settings():
+    return jsonify(settings_status())
+
+
+@app.post("/api/settings")
+def post_settings():
+    data = request.get_json(silent=True) or {}
+    save_settings(data)
+    return jsonify(settings_status())
+
+
+@app.get("/api/projects")
+def get_projects():
+    return jsonify(projects=load_projects())
 
 
 @app.get("/api/download/<path:name>")
@@ -312,6 +378,30 @@ header{display:flex;align-items:center;justify-content:space-between;margin-bott
 .engine{font-family:'IBM Plex Mono';font-size:11px;color:var(--mut);display:flex;align-items:center;gap:7px;
   border:1px solid var(--line);border-radius:99px;padding:6px 12px}
 .engine b{width:7px;height:7px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+.nav{display:flex;gap:8px;align-items:center}
+.navb{font:500 12px 'Space Grotesk';color:var(--fg);background:transparent;border:1px solid var(--line);
+  border-radius:99px;padding:7px 13px;cursor:pointer;transition:.15s;position:relative}
+.navb:hover{border-color:var(--cyan)}
+.navb .dot{position:absolute;top:-3px;right:-3px;min-width:16px;height:16px;border-radius:99px;background:var(--mag);
+  color:#fff;font-size:10px;line-height:16px;text-align:center;padding:0 4px;display:none}
+.navb .dot.on{display:block}
+/* modal */
+.overlay{position:fixed;inset:0;background:rgba(5,4,15,.7);backdrop-filter:blur(4px);z-index:50;
+  display:flex;align-items:flex-start;justify-content:center;padding:48px 16px;overflow:auto}
+.modal{background:linear-gradient(180deg,var(--panel),var(--bg2));border:1px solid var(--line);
+  border-radius:18px;padding:26px;width:100%;max-width:560px;box-shadow:0 30px 80px -30px #000}
+.modal h2{font-family:'Space Grotesk';font-size:22px;margin:0 0 4px}
+.modal .x{float:right;cursor:pointer;color:var(--mut);font-size:20px;line-height:1}
+.modal input[type=text],.modal input[type=password]{width:100%;padding:11px 12px;background:var(--input);
+  border:1px solid var(--line);border-radius:10px;color:var(--fg);font:13px 'IBM Plex Mono'}
+.hint{font-family:'IBM Plex Mono';font-size:11px;color:var(--cyan);margin:4px 0 0}
+.histitem{display:flex;gap:12px;align-items:flex-start;padding:13px 0;border-bottom:1px solid var(--line)}
+.histitem .meta{flex:1}.histitem .nm{font-weight:600;word-break:break-all}
+.histitem .sub2{font-family:'IBM Plex Mono';font-size:11px;color:var(--mut);margin-top:3px}
+.histitem .tag2{display:inline-block;font-size:10px;border:1px solid var(--line);border-radius:99px;
+  padding:1px 8px;margin-right:5px;color:var(--cyan)}
+.histitem a{font-family:'IBM Plex Mono';font-size:11px;color:var(--cyan);text-decoration:none;white-space:nowrap}
+.empty{color:var(--mut);font-size:14px;padding:18px 0;text-align:center}
 .hero{margin-bottom:26px}
 .eyebrow{font-family:'IBM Plex Mono';font-size:11px;letter-spacing:4px;text-transform:uppercase;color:var(--mut);margin-bottom:14px}
 .eyebrow span:first-child{color:var(--cyan)}.eyebrow span:last-child{color:var(--mag)}
@@ -413,8 +503,44 @@ details[open] summary:before{content:'▾ '}
     </svg>
     <div class="word">Helix<small>subtitle&nbsp;generator</small></div>
   </div>
-  <div class="engine"><b></b> moteur local · GPU</div>
+  <div class="nav">
+    <button class="navb" id="btnHist">🕓 Historique</button>
+    <button class="navb" id="btnSet">⚙ Réglages</button>
+    <div class="engine"><b></b> local · GPU</div>
+  </div>
 </header>
+
+<div class="overlay hidden" id="setModal">
+  <div class="modal">
+    <span class="x" onclick="document.getElementById('setModal').classList.add('hidden')">✕</span>
+    <h2>Réglages</h2>
+    <p class="tag" style="font-size:13px;margin:0 0 16px">Clés API stockées localement (data/settings.json). Elles ne quittent jamais ta machine.</p>
+    <label>Clé API Anthropic (Claude)</label>
+    <input type="password" id="set_anthropic" placeholder="sk-ant-…"><p class="hint" id="hint_anthropic"></p>
+    <label>Clé API OpenAI</label>
+    <input type="password" id="set_openai" placeholder="sk-…"><p class="hint" id="hint_openai"></p>
+    <label>Clé API DeepL</label>
+    <input type="password" id="set_deepl" placeholder="…:fx"><p class="hint" id="hint_deepl"></p>
+    <label>Token Hugging Face (diarisation)</label>
+    <input type="password" id="set_hf" placeholder="hf_…"><p class="hint" id="hint_hf"></p>
+    <div class="row" style="margin-top:6px">
+      <div><label>Fournisseur LLM (traduction)</label><select id="set_provider">
+        <option value="anthropic">Claude (Anthropic)</option>
+        <option value="openai">GPT (OpenAI)</option>
+        <option value="ollama">Ollama (local)</option></select></div>
+      <div><label>Modèle LLM</label><input type="text" id="set_model" placeholder="claude-opus-4-8"></div>
+    </div>
+    <button class="go" id="saveSet">Enregistrer</button>
+  </div>
+</div>
+
+<div class="overlay hidden" id="histModal">
+  <div class="modal">
+    <span class="x" onclick="document.getElementById('histModal').classList.add('hidden')">✕</span>
+    <h2>Historique des projets</h2>
+    <div id="histList"></div>
+  </div>
+</div>
 
 <section class="hero" id="hero">
   <div class="eyebrow"><span>parole</span> &nbsp;↻&nbsp; <span>traduction</span></div>
@@ -552,6 +678,51 @@ $('#go').onclick=async()=>{
   (j.job_ids||[]).forEach((id,k)=>makeCard(id,files[k]?files[k].name:null));
 };
 $('#again').onclick=()=>location.reload();
+
+// ---- réglages ----
+$('#btnSet').onclick=async()=>{
+  try{const s=await(await fetch('/api/settings')).json();
+    [['anthropic','anthropic_key'],['openai','openai_key'],['deepl','deepl_key'],['hf','hf_token']].forEach(([id,key])=>{
+      $('#hint_'+id).textContent = s[key+'_set']?('configurée · '+s[key+'_hint']):'non configurée';});
+    $('#set_provider').value=s.llm_provider||'anthropic';$('#set_model').value=s.llm_model||'';
+  }catch(e){}
+  $('#setModal').classList.remove('hidden');
+};
+$('#saveSet').onclick=async()=>{
+  const body={llm_provider:$('#set_provider').value, llm_model:$('#set_model').value.trim()};
+  const map={anthropic_key:'set_anthropic',openai_key:'set_openai',deepl_key:'set_deepl',hf_token:'set_hf'};
+  for(const k in map){const v=$('#'+map[k]).value.trim(); if(v)body[k]=v;}  // n'envoie que ce qui est saisi
+  $('#saveSet').textContent='Enregistré ✓';
+  try{await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});}catch(e){}
+  for(const k in map)$('#'+map[k]).value='';
+  setTimeout(()=>{$('#saveSet').textContent='Enregistrer';$('#setModal').classList.add('hidden');},700);
+};
+
+// ---- historique ----
+$('#btnHist').onclick=async()=>{
+  const box=$('#histList');box.innerHTML='<div class="empty">Chargement…</div>';
+  $('#histModal').classList.remove('hidden');
+  let p;try{p=(await(await fetch('/api/projects')).json()).projects||[];}catch(e){p=[];}
+  if(!p.length){box.innerHTML='<div class="empty">Aucun projet enregistré pour l\'instant.</div>';return;}
+  box.innerHTML='';
+  p.forEach(pr=>{const d=document.createElement('div');d.className='histitem';
+    const tags=(pr.tags||[]).map(t=>'<span class="tag2">'+t+'</span>').join('');
+    const langs=(pr.targets||[]).join(', ');
+    const links=(pr.files||[]).map(f=>'<a href="/api/download/'+encodeURIComponent(f.name)+'">⬇ '+(f.kind==='video'?'vidéo':f.kind)+'</a>').join(' · ');
+    d.innerHTML='<div class="meta"><div class="nm">'+(pr.name||'projet')+'</div>'+
+      '<div class="sub2">'+(pr.date||'')+(langs?' · '+langs:'')+'</div><div style="margin-top:5px">'+tags+'</div></div>'+
+      '<div style="text-align:right">'+links+'</div>';
+    box.appendChild(d);});
+};
+
+// ---- réattache des jobs en cours au chargement ----
+window.addEventListener('load',async()=>{
+  try{const j=(await(await fetch('/api/jobs')).json()).jobs||[];
+    const active=j.filter(x=>['running','queued','review'].includes(x.status));
+    if(active.length){$('#again').classList.remove('hidden');
+      active.forEach(x=>makeCard(x.id,x.name));}
+  }catch(e){}
+});
 
 // one card per job
 function makeCard(id,localName){

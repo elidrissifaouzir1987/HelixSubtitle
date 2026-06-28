@@ -28,7 +28,16 @@ class LLMTranslator(Translator):
         self.ollama_host = ollama_host.rstrip("/")
         self.chunk = chunk
         if provider == "anthropic" and not os.environ.get("ANTHROPIC_API_KEY"):
-            raise RuntimeError("ANTHROPIC_API_KEY manquant pour le backend llm/anthropic.")
+            raise RuntimeError("Clé Anthropic manquante (Réglages) pour le backend llm/anthropic.")
+        if provider == "openai" and not os.environ.get("OPENAI_API_KEY"):
+            raise RuntimeError("Clé OpenAI manquante (Réglages) pour le backend llm/openai.")
+
+    def _call(self, system: str, user: str) -> str:
+        if self.provider == "anthropic":
+            return self._call_anthropic(system, user)
+        if self.provider == "openai":
+            return self._call_openai(system, user)
+        return self._call_ollama(system, user)
 
     def translate_batch(self, texts, src, tgt):
         out: list[str] = []
@@ -41,7 +50,7 @@ class LLMTranslator(Translator):
     def _translate_chunk(self, chunk: list[str], src: str, tgt: str) -> list[str]:
         sys = SYSTEM.format(src=src, tgt=tgt)
         user = json.dumps(chunk, ensure_ascii=False)
-        raw = (self._call_anthropic if self.provider == "anthropic" else self._call_ollama)(sys, user)
+        raw = self._call(sys, user)
         parsed = self._parse(raw, len(chunk))
         if parsed is None:
             log.warning("Réponse LLM non parsable, repli ligne-par-ligne sur ce bloc.")
@@ -51,7 +60,7 @@ class LLMTranslator(Translator):
     def _one(self, text: str, src: str, tgt: str) -> str:
         sys = (f"Traduis ce sous-titre de {src} vers {tgt}. Réponds uniquement par la "
                f"traduction, sans guillemets ni commentaire.")
-        raw = (self._call_anthropic if self.provider == "anthropic" else self._call_ollama)(sys, text)
+        raw = self._call(sys, text)
         return raw.strip()
 
     @staticmethod
@@ -81,6 +90,19 @@ class LLMTranslator(Translator):
         )
         r.raise_for_status()
         return "".join(b.get("text", "") for b in r.json().get("content", []))
+
+    def _call_openai(self, system: str, user: str) -> str:
+        r = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {os.environ['OPENAI_API_KEY']}",
+                     "content-type": "application/json"},
+            json={"model": self.model,
+                  "messages": [{"role": "system", "content": system},
+                               {"role": "user", "content": user}]},
+            timeout=120,
+        )
+        r.raise_for_status()
+        return r.json()["choices"][0]["message"]["content"]
 
     def _call_ollama(self, system: str, user: str) -> str:
         r = requests.post(

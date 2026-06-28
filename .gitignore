@@ -6,6 +6,8 @@ __pycache__/
 # Données utilisateur / sorties (vidéos privées — ne pas versionner)
 uploads/
 output/
+# réglages (clés API) + historique des projets
+data/
 
 # Logs et temporaires
 *.log

@@ -55,7 +55,8 @@ flowchart LR
   (via la diarisation) — environnement isolé, voir [DESIGN.md](DESIGN.md)
 - 👄 **Lip-sync (Wav2Lip)** : aligne les bouches à l'écran sur l'audio doublé
   (v1 mono-visage) — environnement isolé
-- 🖥️ **Interface web** thème *Helix* : progression, nom de la vidéo, annulation
+- 🖥️ **Interface web** thème *Helix* : progression, nom de la vidéo, annulation,
+  **réglages des clés API** (Claude/OpenAI/DeepL/HF), **jobs en cours** et **historique** des projets
 - ⚡ **Local & GPU** : aucune donnée envoyée en ligne (sauf backends DeepL/Claude au choix)
 
 ## Installation
