@@ -1,50 +1,62 @@
-# subgen — sous-titres traduits + attache vidéo
+<div align="center">
 
-Pipeline robuste basé sur **WhisperX** (transcription, alignement, diarisation) et
-**ffmpeg** (attache), avec traduction **configurable** : NLLB (local), LLM
-(Anthropic/Ollama) ou API (DeepL).
+# 🧬 Helix — Subtitle Generator
 
+**Génère des sous-titres traduits et les attache à n'importe quelle vidéo, en local sur ton GPU.**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-3DE1D6.svg)](LICENSE)
+![Python](https://img.shields.io/badge/Python-3.12%2B-FF5D8F.svg)
+![WhisperX](https://img.shields.io/badge/ASR-WhisperX-3DE1D6.svg)
+![GPU](https://img.shields.io/badge/CUDA-cu128%20(RTX%2050xx)-FFC857.svg)
+![UI](https://img.shields.io/badge/UI-Flask-FF5D8F.svg)
+
+*parole ↻ traduction — deux brins, une traduction.*
+
+</div>
+
+---
+
+Helix écoute une vidéo, **transcrit** chaque mot (WhisperX), **traduit** dans la langue
+de ton choix, puis **rattache** les sous-titres à l'image (piste activable ou gravée) —
+le tout hors-ligne, sur ta carte graphique. Interface en ligne de commande **et**
+interface web.
+
+## Pipeline
+
+```mermaid
+flowchart LR
+    A[Vidéo / lien] -->|ffmpeg| B[Audio 16 kHz]
+    B --> C["WhisperX<br/>ASR + alignement + diarisation"]
+    C --> D{Traduction}
+    D -->|NLLB local| E[Sous-titres traduits]
+    D -->|LLM Claude/Ollama| E
+    D -->|DeepL| E
+    E -->|nettoyage texte| F[SRT / ASS / VTT]
+    F -->|ffmpeg| G["Vidéo sous-titrée<br/>(mux soft ou burn-in NVENC)"]
 ```
-vidéo ─▶ audio 16k ─▶ WhisperX (ASR+align+diar) ─▶ traduction ─▶ SRT/ASS ─▶ ffmpeg ─▶ vidéo sous-titrée
-```
+
+## Fonctionnalités
+
+- 🎙️ **Transcription** précise avec alignement mot-à-mot (WhisperX / faster-whisper)
+- 🌍 **Traduction configurable** : NLLB (local, ~30 langues), LLM (Claude / Ollama), DeepL
+- 🧹 **Nettoyage texte** anti-carreaux (tatweel, harakat, caractères invisibles)
+- 🎬 **Attache** : piste activable (mux) ou sous-titres gravés (NVENC, H.264/HEVC)
+- 🔗 **Import par lien** : YouTube, Vimeo… (yt-dlp) avec choix de qualité
+- 🖥️ **Interface web** thème *Helix* : progression, nom de la vidéo, annulation
+- ⚡ **Local & GPU** : aucune donnée envoyée en ligne (sauf backends DeepL/Claude au choix)
 
 ## Installation
 
-L'environnement `.venv` contient déjà WhisperX + torch (cu128) + transformers. Sinon :
+L'environnement `.venv` contient déjà WhisperX + torch (cu128). Sinon :
 
 ```powershell
+python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+# torch CUDA (RTX 50xx) :
+.\.venv\Scripts\python.exe -m pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
 ```
 
-ffmpeg doit être sur le PATH (`ffmpeg -version`).
-
-## Utilisation
-
-```powershell
-# Le plus simple (config.yaml par défaut : NLLB local, cible fr, soft-subs mp4)
-.\run.ps1 "C:\videos\conf.mp4"
-
-# Choisir la langue, le moteur, le mode d'attache
-.\run.ps1 "conf.mp4" -t es -b nllb --mode soft
-
-# Burn-in (gravé) en HEVC NVENC, avec fichier .ass stylé
-.\run.ps1 "conf.mp4" -t fr --mode hard --formats srt,ass
-
-# Traduction LLM (qualité contextuelle) via Claude
-$env:ANTHROPIC_API_KEY="sk-..."; .\run.ps1 "conf.mp4" -b llm -t fr
-
-# Traduction LLM locale via Ollama
-.\run.ps1 "conf.mp4" -b llm -t fr   # avec translate.llm.provider=ollama dans config.yaml
-
-# DeepL
-$env:DEEPL_API_KEY="..."; .\run.ps1 "conf.mp4" -b api -t fr
-
-# Diarisation des locuteurs (token Hugging Face)
-$env:HF_TOKEN="hf_..."; .\run.ps1 "conf.mp4" --diarize
-```
-
-Sorties dans `output/` : `nom.<lang>.srt` (+ formats demandés) et la vidéo
-(`nom.subbed.mp4` en soft, `nom.hardsub.mp4` en hard).
+`ffmpeg` doit être sur le PATH (`ffmpeg -version`).
 
 ## Interface web (Helix)
 
@@ -52,29 +64,54 @@ Sorties dans `output/` : `nom.<lang>.srt` (+ formats demandés) et la vidéo
 .\web.ps1   # démarre le serveur et ouvre http://localhost:7860
 ```
 
-Glisser-déposer une vidéo **ou** coller un **lien** (YouTube, Vimeo… via yt-dlp, avec
-choix de qualité), choisir les langues et options, suivre la progression (étapes
-parlantes + barre), annuler en cours, puis télécharger la vidéo sous-titrée et le `.srt`.
+Glisse une vidéo **ou** colle un lien, choisis les langues et options, suis la
+progression (étapes parlantes + barre), annule au besoin, puis télécharge le résultat.
 
-## Options CLI principales
+## Ligne de commande
+
+```powershell
+.\run.ps1 "C:\videos\conf.mp4" -t ar              # NLLB local, soft-subs, arabe
+.\run.ps1 "conf.mp4" -t fr -b llm                 # traduction LLM
+.\run.ps1 "conf.mp4" -t es --mode hard --formats srt,ass   # gravé NVENC
+.\run.ps1 "conf.mp4" -s ja -t ar                  # forcer la langue source
+```
 
 | Option | Effet |
 |---|---|
+| `-s, --source` | langue d'origine (défaut : détection auto) |
 | `-t, --target` | langue cible (ISO 639-1) |
 | `-b, --backend` | `nllb` \| `llm` \| `api` |
 | `-m, --model` | modèle ASR (`large-v3`, `large-v3-turbo`…) |
 | `--mode` | `soft` (mux) \| `hard` (burn-in) \| `none` |
 | `--formats` | `srt,ass,vtt` |
-| `--diarize` | identification des locuteurs |
+| `--diarize` | identification des locuteurs (token HF requis) |
 | `--no-translate` | sous-titres dans la langue d'origine |
-| `-v` | logs détaillés (+ traceback) |
 
-Tout est aussi réglable dans `config.yaml`.
+Tout est aussi réglable dans [`config.yaml`](config.yaml).
 
 ## Notes / robustesse
 
 - **Python** : préférer python.org/conda au Python du Microsoft Store (chemins venv/CUDA plus fiables).
-- **VRAM** : RTX 5090 → `batch_size: 24` et `large-v3` en `float16` sans souci ; passer en `int8` pour le CPU.
-- **Traduction** : NLLB = hors-ligne et rapide ; LLM = meilleure qualité (contexte) ; DeepL = top mais en ligne.
-- **Soft vs hard** : soft = activable/désactivable, instantané, sans ré-encodage (recommandé). Hard = gravé, lisible partout.
-- Les fichiers temporaires (audio extrait) sont supprimés sauf `io.keep_temp: true`.
+- **Windows + Hugging Face** : Helix force `HF_HUB_DISABLE_SYMLINKS=1` (sinon `WinError 1314` sans droits admin).
+- **Dépendances** : ne pas installer `gradio` (exige `huggingface-hub ≥ 1.2`, incompatible WhisperX/transformers `< 1.0`) — l'UI utilise Flask.
+- **VRAM** : RTX 5090 → `batch_size 24` et `large-v3` en `float16` sans souci.
+- `uploads/` et `output/` ne sont pas versionnés (vidéos privées).
+
+## Structure
+
+```
+subgen/
+├── pipeline.py      orchestration (+ annulation coopérative)
+├── transcribe.py    WhisperX (ASR + alignement + diarisation)
+├── translate/       moteurs : nllb · llm · api (DeepL)
+├── subtitles.py     écriture SRT/ASS/VTT + mise en forme lisible
+├── textnorm.py      nettoyage texte (anti-carreaux)
+├── attach.py        ffmpeg : mux soft / burn-in NVENC
+├── webapp.py        interface web Flask (thème Helix)
+├── cli.py           ligne de commande
+└── utils.py         ffmpeg, audio, téléchargement par lien
+```
+
+## Licence
+
+[MIT](LICENSE) © 2026 EL IDRISSI FAOUZI Rachid
