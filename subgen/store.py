@@ -75,10 +75,27 @@ def load_projects() -> list:
     return _read(PROJECTS, [])
 
 
-def add_project(record: dict) -> None:
+def _write_projects(items: list) -> None:
     DATA.mkdir(exist_ok=True)
+    PROJECTS.write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def add_project(record: dict) -> None:
     with _LOCK:
         items = load_projects()
         items.insert(0, record)  # plus récent d'abord
-        items = items[:200]       # borne l'historique
-        PROJECTS.write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")
+        _write_projects(items[:200])  # borne l'historique
+
+
+def delete_project(pid: str) -> list:
+    """Supprime un projet de l'historique par son id. Renvoie la liste restante."""
+    with _LOCK:
+        items = [p for p in load_projects() if str(p.get("id", "")) != str(pid)]
+        _write_projects(items)
+        return items
+
+
+def purge_projects() -> None:
+    """Vide tout l'historique."""
+    with _LOCK:
+        _write_projects([])

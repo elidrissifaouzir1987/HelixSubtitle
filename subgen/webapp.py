@@ -17,8 +17,8 @@ from flask import Flask, Response, jsonify, request, send_file
 from .config import Config
 from .pipeline import (Cancelled, build_docs, finalize_outputs, get_targets,
                        prepare_source)
-from .store import (add_project, apply_to_env, load_projects, save_settings,
-                    settings_status, load_settings)
+from .store import (add_project, apply_to_env, delete_project, load_projects,
+                    purge_projects, save_settings, settings_status, load_settings)
 from .subtitles import SubtitleDoc
 from .translate.nllb import NLLB_CODES
 from .utils import download_youtube, expand_url, require_ffmpeg, setup_logging
@@ -321,6 +321,17 @@ def get_projects():
     return jsonify(projects=load_projects())
 
 
+@app.delete("/api/projects/<pid>")
+def del_project(pid: str):
+    return jsonify(projects=delete_project(pid))
+
+
+@app.delete("/api/projects")
+def purge_all():
+    purge_projects()
+    return jsonify(projects=[])
+
+
 @app.get("/api/download/<path:name>")
 def download(name: str):
     p = OUTPUT / Path(name).name
@@ -402,6 +413,9 @@ header{display:flex;align-items:center;justify-content:space-between;margin-bott
   padding:1px 8px;margin-right:5px;color:var(--cyan)}
 .histitem a{font-family:'IBM Plex Mono';font-size:11px;color:var(--cyan);text-decoration:none;white-space:nowrap}
 .empty{color:var(--mut);font-size:14px;padding:18px 0;text-align:center}
+.delhist{margin-top:6px;background:transparent;border:1px solid rgba(255,122,122,.4);color:var(--err);
+  font-family:'IBM Plex Mono';font-size:10px;border-radius:99px;padding:3px 9px;cursor:pointer}
+.delhist:hover{background:rgba(255,122,122,.1)}
 .hero{margin-bottom:26px}
 .eyebrow{font-family:'IBM Plex Mono';font-size:11px;letter-spacing:4px;text-transform:uppercase;color:var(--mut);margin-bottom:14px}
 .eyebrow span:first-child{color:var(--cyan)}.eyebrow span:last-child{color:var(--mag)}
@@ -528,7 +542,8 @@ details[open] summary:before{content:'▾ '}
         <option value="anthropic">Claude (Anthropic)</option>
         <option value="openai">GPT (OpenAI)</option>
         <option value="ollama">Ollama (local)</option></select></div>
-      <div><label>Modèle LLM</label><input type="text" id="set_model" placeholder="claude-opus-4-8"></div>
+      <div><label>Modèle LLM</label><select id="set_model_sel"></select>
+        <input type="text" id="set_model" placeholder="nom du modèle" style="margin-top:8px;display:none"></div>
     </div>
     <button class="go" id="saveSet">Enregistrer</button>
   </div>
@@ -537,8 +552,11 @@ details[open] summary:before{content:'▾ '}
 <div class="overlay hidden" id="histModal">
   <div class="modal">
     <span class="x" onclick="document.getElementById('histModal').classList.add('hidden')">✕</span>
-    <h2>Historique des projets</h2>
-    <div id="histList"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <h2 style="margin:0">Historique des projets</h2>
+      <button class="btn btn-cancel" id="purgeHist" style="flex:none;padding:8px 14px">🗑 Purger</button>
+    </div>
+    <div id="histList" style="margin-top:14px"></div>
   </div>
 </div>
 
@@ -575,7 +593,7 @@ details[open] summary:before{content:'▾ '}
   <div class="row">
     <div><label>Moteur de traduction</label><select id="backend">
       <option value="nllb">NLLB · local hors-ligne</option>
-      <option value="llm">LLM · Claude / Ollama</option>
+      <option value="llm">LLM · Claude / GPT / Ollama</option>
       <option value="api">DeepL · clé API</option></select></div>
     <div><label>Transcription</label><select id="model">
       <option value="large-v3">large-v3 · qualité max</option>
@@ -680,16 +698,37 @@ $('#go').onclick=async()=>{
 $('#again').onclick=()=>location.reload();
 
 // ---- réglages ----
+const MODELS={
+  anthropic:['claude-opus-4-8','claude-sonnet-4-6','claude-haiku-4-5-20251001'],
+  openai:['gpt-4o','gpt-4o-mini','gpt-4-turbo','o3-mini'],
+  ollama:['llama3.1','qwen2.5:14b','mistral','gemma2']
+};
+function populateModels(provider,current){
+  const sel=$('#set_model_sel');sel.innerHTML='';
+  (MODELS[provider]||[]).forEach(m=>{const o=document.createElement('option');o.value=m;o.textContent=m;sel.appendChild(o);});
+  const c=document.createElement('option');c.value='__custom__';c.textContent='Personnalisé…';sel.appendChild(c);
+  if(current && (MODELS[provider]||[]).includes(current)){sel.value=current;$('#set_model').style.display='none';}
+  else if(current){sel.value='__custom__';$('#set_model').style.display='block';$('#set_model').value=current;}
+  else{sel.selectedIndex=0;$('#set_model').style.display='none';}
+}
+$('#set_provider').onchange=()=>populateModels($('#set_provider').value,'');
+$('#set_model_sel').onchange=()=>{
+  const cust=$('#set_model_sel').value==='__custom__';
+  $('#set_model').style.display=cust?'block':'none';if(cust)$('#set_model').focus();
+};
 $('#btnSet').onclick=async()=>{
   try{const s=await(await fetch('/api/settings')).json();
     [['anthropic','anthropic_key'],['openai','openai_key'],['deepl','deepl_key'],['hf','hf_token']].forEach(([id,key])=>{
       $('#hint_'+id).textContent = s[key+'_set']?('configurée · '+s[key+'_hint']):'non configurée';});
-    $('#set_provider').value=s.llm_provider||'anthropic';$('#set_model').value=s.llm_model||'';
+    $('#set_provider').value=s.llm_provider||'anthropic';
+    populateModels(s.llm_provider||'anthropic', s.llm_model||'');
   }catch(e){}
   $('#setModal').classList.remove('hidden');
 };
 $('#saveSet').onclick=async()=>{
-  const body={llm_provider:$('#set_provider').value, llm_model:$('#set_model').value.trim()};
+  const sel=$('#set_model_sel').value;
+  const model=(sel==='__custom__')?$('#set_model').value.trim():sel;
+  const body={llm_provider:$('#set_provider').value, llm_model:model};
   const map={anthropic_key:'set_anthropic',openai_key:'set_openai',deepl_key:'set_deepl',hf_token:'set_hf'};
   for(const k in map){const v=$('#'+map[k]).value.trim(); if(v)body[k]=v;}  // n'envoie que ce qui est saisi
   $('#saveSet').textContent='Enregistré ✓';
@@ -699,10 +738,8 @@ $('#saveSet').onclick=async()=>{
 };
 
 // ---- historique ----
-$('#btnHist').onclick=async()=>{
-  const box=$('#histList');box.innerHTML='<div class="empty">Chargement…</div>';
-  $('#histModal').classList.remove('hidden');
-  let p;try{p=(await(await fetch('/api/projects')).json()).projects||[];}catch(e){p=[];}
+function renderHist(p){
+  const box=$('#histList');
   if(!p.length){box.innerHTML='<div class="empty">Aucun projet enregistré pour l\'instant.</div>';return;}
   box.innerHTML='';
   p.forEach(pr=>{const d=document.createElement('div');d.className='histitem';
@@ -711,8 +748,21 @@ $('#btnHist').onclick=async()=>{
     const links=(pr.files||[]).map(f=>'<a href="/api/download/'+encodeURIComponent(f.name)+'">⬇ '+(f.kind==='video'?'vidéo':f.kind)+'</a>').join(' · ');
     d.innerHTML='<div class="meta"><div class="nm">'+(pr.name||'projet')+'</div>'+
       '<div class="sub2">'+(pr.date||'')+(langs?' · '+langs:'')+'</div><div style="margin-top:5px">'+tags+'</div></div>'+
-      '<div style="text-align:right">'+links+'</div>';
+      '<div style="text-align:right">'+links+'<br><button class="delhist" data-id="'+(pr.id||'')+'">✕ supprimer</button></div>';
     box.appendChild(d);});
+  box.querySelectorAll('.delhist').forEach(b=>b.onclick=async()=>{
+    try{const r=await fetch('/api/projects/'+encodeURIComponent(b.dataset.id),{method:'DELETE'});
+      renderHist((await r.json()).projects||[]);}catch(e){}});
+}
+$('#btnHist').onclick=async()=>{
+  const box=$('#histList');box.innerHTML='<div class="empty">Chargement…</div>';
+  $('#histModal').classList.remove('hidden');
+  let p;try{p=(await(await fetch('/api/projects')).json()).projects||[];}catch(e){p=[];}
+  renderHist(p);
+};
+$('#purgeHist').onclick=async()=>{
+  if(!confirm('Vider tout l\'historique ? (les fichiers générés restent sur le disque)'))return;
+  try{const r=await fetch('/api/projects',{method:'DELETE'});renderHist((await r.json()).projects||[]);}catch(e){}
 };
 
 // ---- réattache des jobs en cours au chargement ----
