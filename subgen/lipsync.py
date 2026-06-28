@@ -29,9 +29,10 @@ def _run_wav2lip(face_video: Path, speech_wav: Path, out_video: Path) -> None:
     """Lance Wav2Lip : visage (vidéo) + parole (wav) -> vidéo lip-syncée."""
     (W2L_DIR / "temp").mkdir(exist_ok=True)
     (W2L_DIR / "results").mkdir(exist_ok=True)
+    # cwd = dossier Wav2Lip -> chemins d'E/S en absolu (le checkpoint reste relatif au cwd)
     cmd = [str(LS_PY), "inference.py", "--checkpoint_path", "checkpoints/wav2lip_gan.pth",
-           "--face", str(face_video), "--audio", str(speech_wav),
-           "--outfile", str(out_video), "--nosmooth"]
+           "--face", str(Path(face_video).resolve()), "--audio", str(Path(speech_wav).resolve()),
+           "--outfile", str(Path(out_video).resolve()), "--nosmooth"]
     log.info("Synchronisation des lèvres (Wav2Lip)… (peut être long)")
     proc = subprocess.run(cmd, cwd=str(W2L_DIR), capture_output=True, text=True,
                           encoding="utf-8", errors="replace")
@@ -57,8 +58,10 @@ def lipsync_combined(ffmpeg: str, original_video: Path, combined_video: Path,
     try:
         # 1) parole cible = piste audio doublée du fichier combiné (sélection par langue)
         speech = tmp / "speech.wav"
+        # sélection par langue : restreinte à l'audio (-vn -sn) car le sous-titre
+        # cible porte la même langue et collisionnerait sinon
         run([ffmpeg, "-y", "-i", str(combined_video), "-map", f"0:m:language:{_iso(target_lang)}",
-             "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(speech)],
+             "-vn", "-sn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(speech)],
             "extraction parole doublée")
         # 2) lip-sync (frames d'origine alignées sur la voix doublée)
         ls = tmp / "ls.mp4"
