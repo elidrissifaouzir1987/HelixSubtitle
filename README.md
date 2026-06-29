@@ -38,8 +38,10 @@ flowchart LR
 ## Fonctionnalités
 
 - 🎙️ **Transcription** précise avec alignement mot-à-mot (WhisperX / faster-whisper)
-- 🌍 **Traduction configurable** : NLLB (local, ~30 langues), LLM (Claude / Ollama), DeepL
+- 🌍 **Traduction configurable** : NLLB (local, ~30 langues), LLM (Claude / GPT / Ollama), DeepL
 - 🗂️ **Multi-langues en une passe** : plusieurs langues cibles, transcription mutualisée, mux multi-pistes
+- ✂️ **Découpage fin réglable** : recoupe les longs blocs en sous-titres lisibles (phrases/pauses) ; désactivable pour aller plus vite
+- 👥 **Distinction des locuteurs** : diarisation (token HF) → coupe par locuteur + étiquettes S1/S2 (couleurs en .ass)
 - 🪢 **Sous-titres bilingues** : source + traduction empilées (apprentissage)
 - ✎ **Éditeur intégré** : réviser/corriger les sous-titres avant l'attache
 - 🧹 **Nettoyage texte** anti-carreaux (tatweel, harakat, caractères invisibles)
@@ -78,8 +80,12 @@ python -m venv .venv
 .\web.ps1   # démarre le serveur et ouvre http://localhost:7860
 ```
 
-Glisse une vidéo **ou** colle un lien, choisis les langues et options, suis la
-progression (étapes parlantes + barre), annule au besoin, puis télécharge le résultat.
+Glisse une vidéo (ou plusieurs) **ou** colle un lien, choisis les langues et options,
+suis la progression (étapes parlantes + barre), annule au besoin, puis télécharge le résultat.
+
+- **⚙ Réglages** : clés API (Claude / OpenAI / DeepL) et token Hugging Face, stockés
+  localement dans `data/` (jamais versionnés) ; fournisseur LLM + **modèle** via liste déroulante.
+- **🕓 Historique** : projets persistants (`data/projects.json`), avec **suppression** par projet et **purge**.
 
 ## Ligne de commande
 
@@ -107,7 +113,8 @@ progression (étapes parlantes + barre), annule au besoin, puis télécharge le 
 | `-m, --model` | modèle ASR (`large-v3`, `large-v3-turbo`…) |
 | `--mode` | `soft` (mux) \| `hard` (burn-in) \| `none` |
 | `--formats` | `srt,ass,vtt` |
-| `--diarize` | identification des locuteurs (token HF requis) |
+| `--diarize` / `--speaker-labels` | identification / étiquetage des locuteurs (token HF requis) |
+| `--fast` | mode rapide : pas d'alignement ni de découpage fin |
 | `--no-translate` | sous-titres dans la langue d'origine |
 
 Tout est aussi réglable dans [`config.yaml`](config.yaml).
@@ -126,10 +133,14 @@ Tout est aussi réglable dans [`config.yaml`](config.yaml).
 subgen/
 ├── pipeline.py      orchestration (+ annulation coopérative)
 ├── transcribe.py    WhisperX (ASR + alignement + diarisation)
-├── translate/       moteurs : nllb · llm · api (DeepL)
-├── subtitles.py     écriture SRT/ASS/VTT + mise en forme lisible
+├── translate/       moteurs : nllb · llm (Claude/GPT/Ollama) · api (DeepL)
+├── resegment.py     redécoupage mot-à-mot + coupe par locuteur
+├── subtitles.py     écriture SRT/ASS/VTT + étiquettes locuteurs
 ├── textnorm.py      nettoyage texte (anti-carreaux)
 ├── attach.py        ffmpeg : mux soft / burn-in NVENC
+├── dub/             doublage : tts (Edge/XTTS) · separate (Demucs) · build/mux
+├── lipsync.py       synchro labiale (Wav2Lip, venv isolé)
+├── store.py         réglages (clés API) + historique des projets
 ├── webapp.py        interface web Flask (thème Helix)
 ├── cli.py           ligne de commande
 └── utils.py         ffmpeg, audio, téléchargement par lien

@@ -7,7 +7,6 @@ from pathlib import Path
 
 import numpy as np
 
-from ..attach import _iso
 from ..config import Config
 from ..utils import log, media_duration, run
 from .tts import synth_segments
@@ -90,24 +89,6 @@ def build_track(ffmpeg: str, video: Path, segments, lang: str, cfg: Config, tmp:
     out = tmp / f"dub_{lang}.wav"
     _write_wav(out, buf)
     return out
-
-
-def mux_dub(ffmpeg: str, video: Path, dub_wav: Path, cfg: Config, out_dir: Path, lang: str) -> str:
-    container = cfg.get("attach", "container", default="mp4")
-    keep = cfg.get("dub", "keep_original", default=True)
-    out = out_dir / f"{video.stem}.{lang}.dub.{container}"
-    cmd = [ffmpeg, "-y", "-i", str(video), "-i", str(dub_wav),
-           "-map", "0:v:0", "-map", "1:a:0"]
-    if keep:
-        cmd += ["-map", "0:a:0?"]
-    cmd += ["-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
-            "-metadata:s:a:0", f"language={_iso(lang)}", "-disposition:a:0", "default"]
-    if keep:
-        cmd += ["-metadata:s:a:1", "language=orig", "-disposition:a:1", "0"]
-    cmd += [str(out)]
-    log.info("Mux de la vidéo doublée (%s)…", lang)
-    run(cmd, "mux doublage")
-    return str(out)
 
 
 _DISP = {"ar": "Arabe", "en": "Anglais", "fr": "Français", "es": "Espagnol",
@@ -213,24 +194,3 @@ def combined_output(ffmpeg: str, video: Path, written: dict, docs: dict, cfg: Co
         return str(out)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
-
-
-def dub_documents(ffmpeg: str, video: Path, docs: dict, cfg: Config, out_dir: Path,
-                  cancel_event=None) -> list[str]:
-    """Produit une vidéo doublée par langue cible. Renvoie les chemins."""
-    import shutil
-    import tempfile
-
-    total_dur = media_duration(video)
-    if total_dur <= 0:
-        raise RuntimeError("Durée de la vidéo inconnue — doublage impossible.")
-    out_dir.mkdir(parents=True, exist_ok=True)
-    results: list[str] = []
-    for lang, doc in docs.items():
-        tmp = Path(tempfile.mkdtemp(prefix="subgen_dub_"))
-        try:
-            track = build_track(ffmpeg, video, doc.segments, lang, cfg, tmp, total_dur, cancel_event)
-            results.append(mux_dub(ffmpeg, video, track, cfg, out_dir, lang))
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
-    return results

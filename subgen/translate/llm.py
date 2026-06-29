@@ -50,7 +50,7 @@ class LLMTranslator(Translator):
     def _translate_chunk(self, chunk: list[str], src: str, tgt: str) -> list[str]:
         sys = SYSTEM.format(src=src, tgt=tgt)
         user = json.dumps(chunk, ensure_ascii=False)
-        raw = self._call(sys, user)
+        raw = self._call(sys, user) or ""  # réponse vide/None -> repli, pas de crash
         parsed = self._parse(raw, len(chunk))
         if parsed is None:
             log.warning("Réponse LLM non parsable, repli ligne-par-ligne sur ce bloc.")
@@ -60,7 +60,7 @@ class LLMTranslator(Translator):
     def _one(self, text: str, src: str, tgt: str) -> str:
         sys = (f"Traduis ce sous-titre de {src} vers {tgt}. Réponds uniquement par la "
                f"traduction, sans guillemets ni commentaire.")
-        raw = self._call(sys, text)
+        raw = self._call(sys, text) or ""
         return raw.strip()
 
     @staticmethod

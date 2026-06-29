@@ -145,8 +145,11 @@ def finalize_outputs(ffmpeg: str, video: Path, docs: dict, cfg: Config, out_dir:
         if cfg.get("lipsync", "enabled", default=False):
             _ck(cancel_event)
             from .lipsync import lipsync_combined
+            # langue de la piste doublée par défaut = 1re clé de docs (== tag posé
+            # par combined_output) ; robuste même sans traduction (clé = langue source)
+            primary = next(iter(docs))
             final = lipsync_combined(ffmpeg, video, Path(combined),
-                                     get_targets(cfg)[0], cfg, out_dir)
+                                     primary, cfg, out_dir)
             return subs, final, []
         return subs, combined, []  # fichier unique : pistes audio dans la vidéo
     return subs, attach_docs(ffmpeg, video, written, cfg, out_dir), []
