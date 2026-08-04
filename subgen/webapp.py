@@ -88,6 +88,8 @@ def _build_cfg(opts: dict) -> Config:
     cfg.override("attach.mode", opts["mode"])
     cfg.override("attach.container", opts["container"])
     cfg.override("asr.model", opts["model"])
+    cfg.override("asr.engine", opts.get("engine", "whisperx"))
+    cfg.override("asr.verbatim", opts.get("verbatim", False))
     if opts.get("source"):
         cfg.override("asr.language", opts["source"])
     cfg.override("io.output_dir", str(OUTPUT))
@@ -217,6 +219,8 @@ def create_jobs():
     targets = list(dict.fromkeys([t for t in targets if t]))  # dédoublonne, garde l'ordre
     base = {
         "targets": targets,
+        "engine": request.form.get("engine", "whisperx"),
+        "verbatim": request.form.get("verbatim") == "1",
         "detailed": request.form.get("detailed", "1") == "1",
         "bilingual": request.form.get("bilingual") == "1",
         "dub": request.form.get("dub") == "1",
@@ -605,10 +609,15 @@ details[open] summary:before{content:'▾ '}
       <option value="nllb">NLLB · local hors-ligne</option>
       <option value="llm">LLM · Claude / GPT / Ollama</option>
       <option value="api">DeepL · clé API</option></select></div>
-    <div><label>Transcription</label><select id="model">
-      <option value="large-v3">large-v3 · qualité max</option>
-      <option value="large-v3-turbo">large-v3-turbo · rapide</option>
-      <option value="medium">medium · léger</option></select></div>
+    <div><label>Moteur de transcription</label><select id="engine">
+      <option value="whisperx">WhisperX · ~99 langues</option>
+      <option value="crisperwhisper">CrisperWhisper 2.0 · timings précis</option></select></div>
+  </div>
+  <div class="row">
+    <div><label>Modèle de transcription</label><select id="model"></select></div>
+    <div id="verbatimWrap" class="hidden"><label>Style de transcription</label><select id="verbatim">
+      <option value="0">Nettoyé · sans hésitations</option>
+      <option value="1">Verbatim · tout ce qui est dit</option></select></div>
   </div>
   <div class="row">
     <div><label>Sous-titres</label><select id="mode">
@@ -669,6 +678,20 @@ function refresh(){$('#go').disabled=!(files.length||yt.value.trim());}
 ['dragleave','drop'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.remove('hot')}));
 drop.addEventListener('drop',ev=>{const fs=[...ev.dataTransfer.files];if(fs.length){inp.files=ev.dataTransfer.files;setFiles(fs)}});
 
+// moteur ASR : la liste de modèles suit le moteur choisi
+const ASR_MODELS={
+  whisperx:[['large-v3','large-v3 · qualité max'],['large-v3-turbo','large-v3-turbo · rapide'],['medium','medium · léger']],
+  crisperwhisper:[['large','large · qualité max'],['turbo','turbo · rapide'],['medium','medium · léger'],['small','small · très léger']]
+};
+function populateAsr(){
+  const eng=$('#engine').value, sel=$('#model');
+  sel.innerHTML='';
+  (ASR_MODELS[eng]||[]).forEach(([v,t])=>{const o=document.createElement('option');o.value=v;o.textContent=t;sel.appendChild(o);});
+  $('#verbatimWrap').classList.toggle('hidden', eng!=='crisperwhisper');
+}
+$('#engine').onchange=populateAsr;
+populateAsr();
+
 // stages
 const STAGES=[
   {re:/lèvres|lip-?sync|Wav2Lip/i,label:'Synchronisation des lèvres',pct:98},
@@ -695,6 +718,7 @@ $('#go').onclick=async()=>{
   const common=(fd)=>{fd.append('source',$('#source').value);targets.forEach(t=>fd.append('targets',t));
     ['backend','model','mode','container'].forEach(k=>fd.append(k,$('#'+k).value));
     fd.append('quality',$('#quality').value);
+    fd.append('engine',$('#engine').value);fd.append('verbatim',$('#verbatim').value);
     fd.append('detailed',$('#detailed').checked?'1':'0');
     fd.append('bilingual',$('#bilingual').checked?'1':'0');fd.append('review',$('#review').checked?'1':'0');
     fd.append('dub',$('#dub').checked?'1':'0');fd.append('dub_backend',$('#dubbackend').value);

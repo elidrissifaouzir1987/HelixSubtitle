@@ -38,6 +38,8 @@ flowchart LR
 ## Fonctionnalités
 
 - 🎙️ **Transcription** précise avec alignement mot-à-mot (WhisperX / faster-whisper)
+- 🔀 **Moteur ASR au choix** : **WhisperX** (~99 langues) ou **CrisperWhisper 2.0**
+  (timestamps mot-à-mot ~30 ms, modes *nettoyé* / *verbatim*, ~10 langues)
 - 🌍 **Traduction configurable** : NLLB (local, ~30 langues), LLM (Claude / GPT / Ollama), DeepL
 - 🗂️ **Multi-langues en une passe** : plusieurs langues cibles, transcription mutualisée, mux multi-pistes
 - ✂️ **Découpage fin réglable** : recoupe les longs blocs en sous-titres lisibles (phrases/pauses) ; désactivable pour aller plus vite
@@ -94,6 +96,8 @@ suis la progression (étapes parlantes + barre), annule au besoin, puis téléch
 .\run.ps1 "conf.mp4" -t fr -b llm                 # traduction LLM
 .\run.ps1 "conf.mp4" -t es --mode hard --formats srt,ass   # gravé NVENC
 .\run.ps1 "conf.mp4" -s ja -t ar                  # forcer la langue source
+.\run.ps1 "conf.mp4" -e crisperwhisper -t ar      # transcription CrisperWhisper 2.0
+.\run.ps1 "conf.mp4" -e crisperwhisper --verbatim # garde les hésitations telles quelles
 .\run.ps1 "conf.mp4" -t ar --dub                  # doublage : voix arabe synthétique
 .\run.ps1 "conf.mp4" -t ar --clone                # doublage avec clonage de voix (XTTS)
 .\run.ps1 "conf.mp4" -t ar --lipsync              # doublage + synchro labiale
@@ -110,7 +114,9 @@ suis la progression (étapes parlantes + barre), annule au besoin, puis téléch
 | `-s, --source` | langue d'origine (défaut : détection auto) |
 | `-t, --target` | langue cible (ISO 639-1) |
 | `-b, --backend` | `nllb` \| `llm` \| `api` |
-| `-m, --model` | modèle ASR (`large-v3`, `large-v3-turbo`…) |
+| `-m, --model` | modèle ASR (`large-v3`, `large-v3-turbo`… / `large`, `turbo` pour CrisperWhisper) |
+| `-e, --engine` | moteur de transcription : `whisperx` (défaut) \| `crisperwhisper` |
+| `--verbatim` | CrisperWhisper : garde les hésitations (défaut : texte nettoyé) |
 | `--mode` | `soft` (mux) \| `hard` (burn-in) \| `none` |
 | `--formats` | `srt,ass,vtt` |
 | `--diarize` / `--speaker-labels` | identification / étiquetage des locuteurs (token HF requis) |
@@ -124,6 +130,11 @@ Tout est aussi réglable dans [`config.yaml`](config.yaml).
 - **Python** : préférer python.org/conda au Python du Microsoft Store (chemins venv/CUDA plus fiables).
 - **Windows + Hugging Face** : Helix force `HF_HUB_DISABLE_SYMLINKS=1` (sinon `WinError 1314` sans droits admin).
 - **Dépendances** : ne pas installer `gradio` (exige `huggingface-hub ≥ 1.2`, incompatible WhisperX/transformers `< 1.0`) — l'UI utilise Flask.
+- **CrisperWhisper** : installer la variante `crisperwhisper[transformers]` (le backend `[ct2]`
+  exige le fork `ctranslate2-crisperwhisper`, sans build Windows, qui **écraserait** le
+  `ctranslate2` dont dépend WhisperX). Poids sous **licence non commerciale** (Nyra Health),
+  téléchargés au 1er usage ; ~10 langues sources (pas d'arabe **en source**) et pas de
+  diarisation native — garde WhisperX pour ces cas.
 - **VRAM** : RTX 5090 → `batch_size 24` et `large-v3` en `float16` sans souci.
 - `uploads/` et `output/` ne sont pas versionnés (vidéos privées).
 
@@ -132,7 +143,8 @@ Tout est aussi réglable dans [`config.yaml`](config.yaml).
 ```
 subgen/
 ├── pipeline.py      orchestration (+ annulation coopérative)
-├── transcribe.py    WhisperX (ASR + alignement + diarisation)
+├── transcribe.py    ASR : dispatch WhisperX / CrisperWhisper (+ alignement, diarisation)
+├── asr_crisper.py   moteur CrisperWhisper 2.0 (timings natifs, verbatim/nettoyé)
 ├── translate/       moteurs : nllb · llm (Claude/GPT/Ollama) · api (DeepL)
 ├── resegment.py     redécoupage mot-à-mot + coupe par locuteur
 ├── subtitles.py     écriture SRT/ASS/VTT + étiquettes locuteurs

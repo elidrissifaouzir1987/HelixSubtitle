@@ -1,7 +1,10 @@
 # Configuration subgen — toutes les clés sont optionnelles (defaults dans subgen/config.py)
 
 asr:
+  engine: whisperx         # whisperx | crisperwhisper (timestamps mot-à-mot + précis)
+  verbatim: false          # crisperwhisper : true = garde hésitations/répétitions
   model: large-v3          # large-v3 | large-v3-turbo (+ rapide) | medium | small
+                           # (crisperwhisper : large | turbo | medium | small)
   device: cuda             # cuda | cpu
   compute_type: float16    # float16 (GPU) | int8 (CPU / éco VRAM)
   batch_size: 16           # ta RTX 5090 (32 Go) supporte 24-32

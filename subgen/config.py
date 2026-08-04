@@ -11,6 +11,9 @@ import yaml
 
 DEFAULTS: dict[str, Any] = {
     "asr": {
+        "engine": "whisperx",         # whisperx | crisperwhisper (timestamps + précis)
+        "verbatim": False,            # crisperwhisper : True = garde hésitations/répétitions
+        "crisper_backend": "transformers",  # transformers (Windows) | ct2 (Linux seulement)
         "model": "large-v3",          # ou large-v3-turbo, medium...
         "device": "cuda",             # cuda | cpu
         "compute_type": "float16",    # float16 (GPU) | int8 (CPU/éco VRAM)

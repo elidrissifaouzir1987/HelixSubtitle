@@ -5,6 +5,12 @@ ctranslate2==4.7.1
 # torch/torchaudio : installer la build CUDA adaptée (cu128 pour RTX 50xx)
 #   pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
 
+# Moteur ASR alternatif — CrisperWhisper 2.0 (optionnel, timings mot-à-mot précis)
+# ⚠️ variante [transformers] obligatoire sous Windows : [ct2] tire le fork
+#    ctranslate2-crisperwhisper (pas de build Windows) qui casserait WhisperX.
+# Poids sous licence NON COMMERCIALE (Nyra Health Research License).
+#   pip install "crisperwhisper[transformers]"
+
 # Traduction NLLB (local)
 transformers>=4.45
 sentencepiece>=0.2

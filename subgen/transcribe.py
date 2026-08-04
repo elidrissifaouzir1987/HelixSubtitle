@@ -1,4 +1,4 @@
-"""Étape ASR : WhisperX (transcription + alignement + diarisation optionnelle)."""
+"""Étape ASR : WhisperX ou CrisperWhisper (+ alignement et diarisation optionnels)."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -12,6 +12,16 @@ def transcribe(audio_path: Path, cfg: Config) -> SubtitleDoc:
     import whisperx  # import tardif : lourd (torch/cuda)
 
     device = cfg.get("asr", "device", default="cuda")
+    audio = whisperx.load_audio(str(audio_path))
+
+    if cfg.get("asr", "engine", default="whisperx") == "crisperwhisper":
+        # timestamps mot-à-mot natifs : ni modèle WhisperX ni alignement wav2vec2
+        from .asr_crisper import crisper_result
+        result = crisper_result(Path(audio_path), cfg)
+        if cfg.get("asr", "diarize", default=False):
+            _diarize(whisperx, result, audio, cfg, device)
+        return SubtitleDoc.from_whisperx(result)
+
     compute = cfg.get("asr", "compute_type", default="float16")
     model_name = cfg.get("asr", "model", default="large-v3")
     batch_size = int(cfg.get("asr", "batch_size", default=16))
@@ -20,7 +30,6 @@ def transcribe(audio_path: Path, cfg: Config) -> SubtitleDoc:
     log.info("Chargement du modèle ASR %s (%s/%s)…", model_name, device, compute)
     model = whisperx.load_model(model_name, device, compute_type=compute, language=language)
 
-    audio = whisperx.load_audio(str(audio_path))
     log.info("Transcription en cours (batch=%d)…", batch_size)
     result = model.transcribe(audio, batch_size=batch_size, language=language)
     detected = result.get("language")

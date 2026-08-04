@@ -22,6 +22,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--bilingual", action="store_true", help="Sous-titres bilingues (source + traduction)")
     p.add_argument("-b", "--backend", choices=["nllb", "llm", "api"], help="Moteur de traduction")
     p.add_argument("-m", "--model", help="Modèle ASR (ex. large-v3, large-v3-turbo)")
+    p.add_argument("-e", "--engine", choices=["whisperx", "crisperwhisper"],
+                   help="Moteur de transcription (défaut : whisperx)")
+    p.add_argument("--verbatim", action="store_true",
+                   help="CrisperWhisper : garde hésitations/répétitions (défaut : texte nettoyé)")
     p.add_argument("--mode", choices=["soft", "hard", "none"], help="Attache : mux / burn-in / aucune")
     p.add_argument("--container", choices=["mp4", "mkv"], help="Conteneur de sortie")
     p.add_argument("--formats", help="Formats de sous-titres, séparés par des virgules (srt,ass,vtt)")
@@ -56,6 +60,10 @@ def apply_args(cfg: Config, a: argparse.Namespace) -> None:
         cfg.override("lipsync.enabled", True)
     if a.backend: cfg.override("translate.backend", a.backend)
     if a.model: cfg.override("asr.model", a.model)
+    if a.engine: cfg.override("asr.engine", a.engine)
+    if a.verbatim:
+        cfg.override("asr.engine", "crisperwhisper")  # option propre à ce moteur
+        cfg.override("asr.verbatim", True)
     if a.mode: cfg.override("attach.mode", a.mode)
     if a.container: cfg.override("attach.container", a.container)
     if a.formats: cfg.override("subtitles.formats", [f.strip() for f in a.formats.split(",")])
