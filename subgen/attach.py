@@ -45,20 +45,47 @@ def attach(ffmpeg: str, video: Path, subs: list[tuple[str, Path]], cfg: Config, 
     return out
 
 
+def _run_resilient(cmd_copy: list, cmd_reencode: list, desc: str) -> None:
+    """Copie l'audio (rapide, sans perte) ; ré-encode si la source est abîmée.
+
+    Certaines vidéos (flux MPEG-TS capturés, AAC/ADTS corrompu) ne peuvent pas
+    être remuxées telles quelles vers MP4 : ffmpeg échoue sur le filtre
+    aac_adtstoasc. On rejoue alors la commande en ré-encodant l'audio et en
+    tolérant les paquets corrompus.
+    """
+    try:
+        run(cmd_copy, desc)
+    except RuntimeError:
+        log.warning("Audio source non copiable tel quel (flux abîmé) — "
+                    "nouvelle tentative avec ré-encodage audio…")
+        run(cmd_reencode, f"{desc} (ré-encodage audio)")
+
+
+# flags de tolérance aux paquets corrompus (placés avant -i)
+_TOLERANT = ["-err_detect", "ignore_err", "-fflags", "+discardcorrupt+genpts"]
+
+
 def _soft(ffmpeg, video, subs, out, container):
     scodec = "mov_text" if container == "mp4" else "srt"
     log.info("Mux des sous-titres (soft, %s, %d piste(s))…", container, len(subs))
-    cmd = [ffmpeg, "-y", "-i", str(video)]
-    for _, path in subs:
-        cmd += ["-i", str(path)]
-    cmd += ["-map", "0:v:0", "-map", "0:a?"]
-    for idx in range(len(subs)):
-        cmd += ["-map", str(idx + 1)]
-    cmd += ["-c:v", "copy", "-c:a", "copy", "-c:s", scodec]
-    for idx, (lang, _) in enumerate(subs):
-        cmd += [f"-metadata:s:s:{idx}", f"language={_iso(lang)}"]
-    cmd += ["-disposition:s:0", "default", str(out)]
-    run(cmd, "mux sous-titres")
+
+    def build(acodec: list, tolerant: bool) -> list:
+        cmd = [ffmpeg, "-y"] + (_TOLERANT if tolerant else [])
+        cmd += ["-i", str(video)]
+        for _, path in subs:
+            cmd += ["-i", str(path)]
+        cmd += ["-map", "0:v:0", "-map", "0:a?"]
+        for idx in range(len(subs)):
+            cmd += ["-map", str(idx + 1)]
+        cmd += ["-c:v", "copy", *acodec, "-c:s", scodec]
+        for idx, (lang, _) in enumerate(subs):
+            cmd += [f"-metadata:s:s:{idx}", f"language={_iso(lang)}"]
+        cmd += ["-disposition:s:0", "default", str(out)]
+        return cmd
+
+    _run_resilient(build(["-c:a", "copy"], False),
+                   build(["-c:a", "aac", "-b:a", "192k"], True),
+                   "mux sous-titres")
 
 
 def _hard(ffmpeg, video, subtitle, out, cfg: Config):
@@ -71,7 +98,12 @@ def _hard(ffmpeg, video, subtitle, out, cfg: Config):
         if style:
             vf += f":force_style='{style}'"
     log.info("Burn-in des sous-titres (hard, %s)…", encoder)
-    run([ffmpeg, "-y", "-i", str(video), "-vf", vf,
-         "-c:v", encoder, "-cq", cq, "-preset", "p5",
-         "-c:a", "copy", str(out)],
-        "burn-in sous-titres")
+
+    def build(acodec: list, tolerant: bool) -> list:
+        return ([ffmpeg, "-y"] + (_TOLERANT if tolerant else [])
+                + ["-i", str(video), "-vf", vf,
+                   "-c:v", encoder, "-cq", cq, "-preset", "p5", *acodec, str(out)])
+
+    _run_resilient(build(["-c:a", "copy"], False),
+                   build(["-c:a", "aac", "-b:a", "192k"], True),
+                   "burn-in sous-titres")

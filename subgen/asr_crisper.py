@@ -59,7 +59,14 @@ def _load_audio(path: Path):
     return whisperx.load_audio(str(path))
 
 
-def _group_words(words: list[dict], max_gap: float, max_dur: float) -> list[dict]:
+# longueur minimale (caractères) avant d'autoriser une coupure sur pause ou
+# fin de phrase : sans ce garde-fou, les pauses naturelles au milieu d'une
+# réplique produisent des sous-titres de 2 mots.
+MIN_CHARS = 20
+
+
+def _group_words(words: list[dict], max_gap: float, max_dur: float,
+                 max_chars: int = 84) -> list[dict]:
     """Regroupe les mots en segments (phrases) : ponctuation, pause, durée max.
 
     CrisperWhisper renvoie une liste de mots à plat ; le reste du pipeline attend
@@ -71,7 +78,13 @@ def _group_words(words: list[dict], max_gap: float, max_dur: float) -> list[dict
         if cur:
             gap = w["start"] - cur[-1]["end"]
             dur = w["end"] - cur[0]["start"]
-            if gap > max_gap or dur > max_dur or _SENT_END.search(cur[-1]["word"]):
+            length = sum(len(x["word"]) + 1 for x in cur)
+            # coupures dures : le sous-titre deviendrait trop long
+            hard = dur > max_dur or length + len(w["word"]) > max_chars
+            # coupures « naturelles » : seulement si le segment est déjà lisible
+            soft = length >= MIN_CHARS and (gap > max_gap
+                                            or _SENT_END.search(cur[-1]["word"]))
+            if hard or soft:
                 segments.append(_mk_segment(cur))
                 cur = []
         cur.append(w)
@@ -152,6 +165,8 @@ def crisper_result(audio_path: Path, cfg: Config) -> dict:
             words,
             max_gap=float(cfg.get("subtitles", "max_gap", default=0.7)),
             max_dur=float(cfg.get("subtitles", "max_duration", default=6.0)),
+            max_chars=int(cfg.get("subtitles", "max_line_chars", default=42))
+            * int(cfg.get("subtitles", "max_lines", default=2)),
         )
 
     detected = getattr(res, "language", None) or lang

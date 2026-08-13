@@ -14,6 +14,10 @@ from .utils import log
 
 _SENT_END = re.compile(r"[.!?…。！？]$")  # fin de phrase (source latine/CJK)
 
+# longueur minimale (caractères) avant d'autoriser une coupure sur pause ou fin
+# de phrase — évite les sous-titres de deux mots aux pauses naturelles.
+MIN_CHARS = 20
+
 
 def _norm_words(seg: Segment) -> list[dict]:
     """Normalise les mots : garantit start/end (report depuis le voisin si absent)."""
@@ -63,10 +67,17 @@ def resegment(doc: SubtitleDoc, cfg: Config) -> SubtitleDoc:
                 dur = w["end"] - first["start"]
                 gap = w["start"] - cur[-1]["end"]
                 spk_change = bool(w["speaker"] and first["speaker"] and w["speaker"] != first["speaker"])
+                # coupures dures : sous-titre trop long, ou changement de locuteur
                 hard = (dur > max_dur or len(cur_text) + 1 + len(w["word"]) > max_chars
-                        or gap > max_gap or spk_change)
-                sentence = bool(_SENT_END.search(cur[-1]["word"])) and (cur[-1]["end"] - first["start"]) >= min_dur
-                if hard or sentence:
+                        or spk_change)
+                # coupures « naturelles » (pause, fin de phrase) : seulement si le
+                # sous-titre est déjà lisible, sinon les pauses au milieu d'une
+                # réplique produisent des sous-titres de deux mots.
+                readable = len(cur_text) >= MIN_CHARS
+                pause = gap > max_gap and readable
+                sentence = (bool(_SENT_END.search(cur[-1]["word"])) and readable
+                            and (cur[-1]["end"] - first["start"]) >= min_dur)
+                if hard or pause or sentence:
                     new.append(_flush(cur))
                     cur = []
             cur.append(w)
